@@ -24,7 +24,7 @@ const navigation = [
   // { name: "Founders", href: "/dashboard/investor/founders", icon: Users },
   { name: "Analytics", href: "/dashboard/investor/analytics", icon: BarChart3 },
   { name: "Email Setup", href: "/dashboard/investor/email", icon: Mail },
-  { name: "Settings", href: "/dashboard/investor/settings", icon: Settings },
+  { name: "Profile", href: "/dashboard/investor/settings", icon: Settings },
 ]
 
 export function InvestorSidebar() {
