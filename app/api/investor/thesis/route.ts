@@ -1,21 +1,35 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getDatabase } from "@/lib/mongodb"
-import { ThesisManager, type InvestorThesis } from "@/lib/matching-engine"
+import { type NextRequest, NextResponse } from "next/server";
+import { getDatabase } from "@/lib/mongodb";
+import { ThesisManager, type InvestorThesis } from "@/lib/matching-engine";
+import { ObjectId } from "mongodb";
+
+function getUserIdFromRequest(request: NextRequest) {
+  const id = request.headers.get("x-user-id");
+  if (!id) return null;
+
+  // Try to convert to ObjectId if possible
+  try {
+    return new ObjectId(id);
+  } catch {
+    return id; // fallback: treat as string _id
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const db = await getDatabase()
+    const db = await getDatabase();
+    const userId = getUserIdFromRequest(request);
 
-    // Note: In a real app, you'd get the investor ID from the authenticated session
-    const investorId = "temp-investor-id"
-
-    const investor = await db.collection("users").findOne({ _id: investorId })
-
-    if (!investor || !investor.investorProfile) {
-      return NextResponse.json(ThesisManager.getDefaultThesis())
+    if (!userId) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // Convert investor profile to thesis format
+    const investor = await db.collection("users").findOne({ _id: userId });
+
+    if (!investor || !investor.investorProfile) {
+      return NextResponse.json(ThesisManager.getDefaultThesis());
+    }
+
     const thesis: InvestorThesis = {
       sectors: investor.investorProfile.sectors || [],
       stages: investor.investorProfile.stagePreference || [],
@@ -24,33 +38,39 @@ export async function GET(request: NextRequest) {
       geographies: investor.investorProfile.geographies || [],
       keywords: investor.investorProfile.keywords || [],
       excludedKeywords: investor.investorProfile.excludedKeywords || [],
-    }
+    };
 
-    return NextResponse.json(thesis)
+    return NextResponse.json(thesis);
   } catch (error) {
-    console.error("Error fetching investor thesis:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+    console.error("Error fetching investor thesis:", error);
+    return NextResponse.json(
+      { message: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    const thesis: InvestorThesis = await request.json()
+    const db = await getDatabase();
+    const userId = getUserIdFromRequest(request);
 
-    // Validate thesis
-    const validation = ThesisManager.validateThesis(thesis)
-    if (!validation.isValid) {
-      return NextResponse.json({ message: "Invalid thesis", errors: validation.errors }, { status: 400 })
+    if (!userId) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDatabase()
+    const thesis: InvestorThesis = await request.json();
 
-    // Note: In a real app, you'd get the investor ID from the authenticated session
-    const investorId = "temp-investor-id"
+    const validation = ThesisManager.validateThesis(thesis);
+    if (!validation.isValid) {
+      return NextResponse.json(
+        { message: "Invalid thesis", errors: validation.errors },
+        { status: 400 }
+      );
+    }
 
-    // Update investor profile with new thesis
     const result = await db.collection("users").updateOne(
-      { _id: investorId },
+      { _id: userId },
       {
         $set: {
           "investorProfile.sectors": thesis.sectors,
@@ -64,16 +84,24 @@ export async function PUT(request: NextRequest) {
           "investorProfile.excludedKeywords": thesis.excludedKeywords,
           updatedAt: new Date(),
         },
-      },
-    )
+      }
+    );
 
     if (result.matchedCount === 0) {
-      return NextResponse.json({ message: "Investor not found" }, { status: 404 })
+      return NextResponse.json(
+        { message: "Investor not found" },
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json({ message: "Investment thesis updated successfully" })
+    return NextResponse.json({
+      message: "Investment thesis updated successfully",
+    });
   } catch (error) {
-    console.error("Error updating investor thesis:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+    console.error("Error updating investor thesis:", error);
+    return NextResponse.json(
+      { message: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

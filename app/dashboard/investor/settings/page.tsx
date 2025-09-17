@@ -1,16 +1,29 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { InvestorSidebar } from "@/components/investor-sidebar"
-import { X, Plus, Save, RefreshCw } from "lucide-react"
-import type { InvestorThesis } from "@/lib/matching-engine"
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { InvestorSidebar } from "@/components/investor-sidebar";
+import { X, Plus, Save, RefreshCw } from "lucide-react";
+import type { InvestorThesis } from "@/lib/matching-engine";
+import { useUser } from "@/context/UserContext";
 
 export default function InvestorSettingsPage() {
   const [thesis, setThesis] = useState<InvestorThesis>({
@@ -21,58 +34,70 @@ export default function InvestorSettingsPage() {
     geographies: [],
     keywords: [],
     excludedKeywords: [],
-  })
-  const [newKeyword, setNewKeyword] = useState("")
-  const [newExcludedKeyword, setNewExcludedKeyword] = useState("")
-  const [newGeography, setNewGeography] = useState("")
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-  const [message, setMessage] = useState("")
+  });
+  const [newKeyword, setNewKeyword] = useState("");
+  const [newExcludedKeyword, setNewExcludedKeyword] = useState("");
+  const [newGeography, setNewGeography] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const { user } = useUser();
+  console.log('user',user);
+  
 
-  useEffect(() => {
+useEffect(() => {
+  if (user?._id) {
     fetchInvestorThesis()
-  }, [])
+  }
+}, [user])
+
 
   const fetchInvestorThesis = async () => {
+    if (!user?._id) return;
     try {
-      const response = await fetch("/api/investor/thesis")
+      const response = await fetch("/api/investor/thesis", {
+        headers: {
+          "x-user-id": user._id, // ✅ pass user ID
+        },
+      });
       if (response.ok) {
-        const data = await response.json()
-        setThesis(data)
+        const data = await response.json();
+        setThesis(data);
       }
     } catch (error) {
-      console.error("Error fetching thesis:", error)
+      console.error("Error fetching thesis:", error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleSave = async () => {
-    setIsSaving(true)
-    setMessage("")
+    if (!user?._id) return;
+    setIsSaving(true);
+    setMessage("");
 
     try {
       const response = await fetch("/api/investor/thesis", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
+          "x-user-id": user._id, // ✅ pass user ID
         },
         body: JSON.stringify(thesis),
-      })
+      });
 
       if (response.ok) {
-        setMessage("Investment thesis saved successfully!")
-        // Trigger re-matching of existing startups
-        await triggerReMatching()
+        setMessage("Investment thesis saved successfully!");
+        await triggerReMatching();
       } else {
-        setMessage("Error saving thesis. Please try again.")
+        setMessage("Error saving thesis. Please try again.");
       }
     } catch (error) {
-      setMessage("Error saving thesis. Please try again.")
+      setMessage("Error saving thesis. Please try again.");
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }
+  };
 
   const triggerReMatching = async () => {
     try {
@@ -82,64 +107,94 @@ export default function InvestorSettingsPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ investorThesis: thesis }),
-      })
+      });
     } catch (error) {
-      console.error("Error triggering re-matching:", error)
+      console.error("Error triggering re-matching:", error);
     }
-  }
+  };
 
   const addSector = (sector: string) => {
     if (sector && !thesis.sectors.includes(sector)) {
-      setThesis((prev) => ({ ...prev, sectors: [...prev.sectors, sector] }))
+      setThesis((prev) => ({ ...prev, sectors: [...prev.sectors, sector] }));
     }
-  }
+  };
 
   const removeSector = (sector: string) => {
-    setThesis((prev) => ({ ...prev, sectors: prev.sectors.filter((s) => s !== sector) }))
-  }
+    setThesis((prev) => ({
+      ...prev,
+      sectors: prev.sectors.filter((s) => s !== sector),
+    }));
+  };
 
   const addStage = (stage: string) => {
     if (stage && !thesis.stages.includes(stage)) {
-      setThesis((prev) => ({ ...prev, stages: [...prev.stages, stage] }))
+      setThesis((prev) => ({ ...prev, stages: [...prev.stages, stage] }));
     }
-  }
+  };
 
   const removeStage = (stage: string) => {
-    setThesis((prev) => ({ ...prev, stages: prev.stages.filter((s) => s !== stage) }))
-  }
+    setThesis((prev) => ({
+      ...prev,
+      stages: prev.stages.filter((s) => s !== stage),
+    }));
+  };
 
   const addKeyword = () => {
     if (newKeyword.trim() && !thesis.keywords.includes(newKeyword.trim())) {
-      setThesis((prev) => ({ ...prev, keywords: [...prev.keywords, newKeyword.trim()] }))
-      setNewKeyword("")
+      setThesis((prev) => ({
+        ...prev,
+        keywords: [...prev.keywords, newKeyword.trim()],
+      }));
+      setNewKeyword("");
     }
-  }
+  };
 
   const removeKeyword = (keyword: string) => {
-    setThesis((prev) => ({ ...prev, keywords: prev.keywords.filter((k) => k !== keyword) }))
-  }
+    setThesis((prev) => ({
+      ...prev,
+      keywords: prev.keywords.filter((k) => k !== keyword),
+    }));
+  };
 
   const addExcludedKeyword = () => {
-    if (newExcludedKeyword.trim() && !thesis.excludedKeywords.includes(newExcludedKeyword.trim())) {
-      setThesis((prev) => ({ ...prev, excludedKeywords: [...prev.excludedKeywords, newExcludedKeyword.trim()] }))
-      setNewExcludedKeyword("")
+    if (
+      newExcludedKeyword.trim() &&
+      !thesis.excludedKeywords.includes(newExcludedKeyword.trim())
+    ) {
+      setThesis((prev) => ({
+        ...prev,
+        excludedKeywords: [...prev.excludedKeywords, newExcludedKeyword.trim()],
+      }));
+      setNewExcludedKeyword("");
     }
-  }
+  };
 
   const removeExcludedKeyword = (keyword: string) => {
-    setThesis((prev) => ({ ...prev, excludedKeywords: prev.excludedKeywords.filter((k) => k !== keyword) }))
-  }
+    setThesis((prev) => ({
+      ...prev,
+      excludedKeywords: prev.excludedKeywords.filter((k) => k !== keyword),
+    }));
+  };
 
   const addGeography = () => {
-    if (newGeography.trim() && !thesis.geographies.includes(newGeography.trim())) {
-      setThesis((prev) => ({ ...prev, geographies: [...prev.geographies, newGeography.trim()] }))
-      setNewGeography("")
+    if (
+      newGeography.trim() &&
+      !thesis.geographies.includes(newGeography.trim())
+    ) {
+      setThesis((prev) => ({
+        ...prev,
+        geographies: [...prev.geographies, newGeography.trim()],
+      }));
+      setNewGeography("");
     }
-  }
+  };
 
   const removeGeography = (geography: string) => {
-    setThesis((prev) => ({ ...prev, geographies: prev.geographies.filter((g) => g !== geography) }))
-  }
+    setThesis((prev) => ({
+      ...prev,
+      geographies: prev.geographies.filter((g) => g !== geography),
+    }));
+  };
 
   if (isLoading) {
     return (
@@ -152,7 +207,7 @@ export default function InvestorSettingsPage() {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -163,33 +218,55 @@ export default function InvestorSettingsPage() {
         <div className="p-6">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-foreground mb-2">Investment Thesis</h1>
+            <h1 className="text-3xl font-bold text-foreground mb-2">
+              Investment Thesis
+            </h1>
             <p className="text-muted-foreground">
-              Configure your investment preferences to improve deal flow matching and relevance scoring
+              Configure your investment preferences to improve deal flow
+              matching and relevance scoring
             </p>
           </div>
 
           {message && (
-            <Alert className={message.includes("Error") ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}>
-              <AlertDescription className={message.includes("Error") ? "text-red-800" : "text-green-800"}>
+            <Alert
+              className={
+                message.includes("Error")
+                  ? "border-red-200 bg-red-50"
+                  : "border-green-200 bg-green-50"
+              }
+            >
+              <AlertDescription
+                className={
+                  message.includes("Error") ? "text-red-800" : "text-green-800"
+                }
+              >
                 {message}
               </AlertDescription>
             </Alert>
           )}
 
-          <div className="max-w-4xl space-y-6">
+          <div className="w-full space-y-6 mx-auto">
             {/* Sectors */}
             <Card>
               <CardHeader>
                 <CardTitle>Preferred Sectors</CardTitle>
-                <CardDescription>Select the industries and sectors you typically invest in</CardDescription>
+                <CardDescription>
+                  Select the industries and sectors you typically invest in
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {thesis.sectors.map((sector) => (
-                    <Badge key={sector} variant="secondary" className="flex items-center gap-1">
+                    <Badge
+                      key={sector}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
                       {sector}
-                      <X className="h-3 w-3 cursor-pointer" onClick={() => removeSector(sector)} />
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() => removeSector(sector)}
+                      />
                     </Badge>
                   ))}
                 </div>
@@ -217,14 +294,23 @@ export default function InvestorSettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Funding Stages</CardTitle>
-                <CardDescription>Select the funding stages you typically invest in</CardDescription>
+                <CardDescription>
+                  Select the funding stages you typically invest in
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {thesis.stages.map((stage) => (
-                    <Badge key={stage} variant="secondary" className="flex items-center gap-1">
+                    <Badge
+                      key={stage}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
                       {stage}
-                      <X className="h-3 w-3 cursor-pointer" onClick={() => removeStage(stage)} />
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() => removeStage(stage)}
+                      />
                     </Badge>
                   ))}
                 </div>
@@ -247,7 +333,9 @@ export default function InvestorSettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Check Size Range</CardTitle>
-                <CardDescription>Define your typical investment amount range</CardDescription>
+                <CardDescription>
+                  Define your typical investment amount range
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -259,7 +347,10 @@ export default function InvestorSettingsPage() {
                       placeholder="50000"
                       value={thesis.checkSizeMin || ""}
                       onChange={(e) =>
-                        setThesis((prev) => ({ ...prev, checkSizeMin: Number.parseInt(e.target.value) || 0 }))
+                        setThesis((prev) => ({
+                          ...prev,
+                          checkSizeMin: Number.parseInt(e.target.value) || 0,
+                        }))
                       }
                     />
                   </div>
@@ -271,7 +362,10 @@ export default function InvestorSettingsPage() {
                       placeholder="500000"
                       value={thesis.checkSizeMax || ""}
                       onChange={(e) =>
-                        setThesis((prev) => ({ ...prev, checkSizeMax: Number.parseInt(e.target.value) || 0 }))
+                        setThesis((prev) => ({
+                          ...prev,
+                          checkSizeMax: Number.parseInt(e.target.value) || 0,
+                        }))
                       }
                     />
                   </div>
@@ -283,14 +377,23 @@ export default function InvestorSettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Geographic Preferences</CardTitle>
-                <CardDescription>Specify regions or countries you prefer to invest in</CardDescription>
+                <CardDescription>
+                  Specify regions or countries you prefer to invest in
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {thesis.geographies.map((geography) => (
-                    <Badge key={geography} variant="secondary" className="flex items-center gap-1">
+                    <Badge
+                      key={geography}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
                       {geography}
-                      <X className="h-3 w-3 cursor-pointer" onClick={() => removeGeography(geography)} />
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() => removeGeography(geography)}
+                      />
                     </Badge>
                   ))}
                 </div>
@@ -312,14 +415,24 @@ export default function InvestorSettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Positive Keywords</CardTitle>
-                <CardDescription>Keywords that increase relevance when found in startup descriptions</CardDescription>
+                <CardDescription>
+                  Keywords that increase relevance when found in startup
+                  descriptions
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {thesis.keywords.map((keyword) => (
-                    <Badge key={keyword} variant="secondary" className="flex items-center gap-1">
+                    <Badge
+                      key={keyword}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
                       {keyword}
-                      <X className="h-3 w-3 cursor-pointer" onClick={() => removeKeyword(keyword)} />
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() => removeKeyword(keyword)}
+                      />
                     </Badge>
                   ))}
                 </div>
@@ -341,14 +454,24 @@ export default function InvestorSettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Excluded Keywords</CardTitle>
-                <CardDescription>Keywords that decrease relevance when found in startup descriptions</CardDescription>
+                <CardDescription>
+                  Keywords that decrease relevance when found in startup
+                  descriptions
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {thesis.excludedKeywords.map((keyword) => (
-                    <Badge key={keyword} variant="destructive" className="flex items-center gap-1">
+                    <Badge
+                      key={keyword}
+                      variant="destructive"
+                      className="flex items-center gap-1"
+                    >
                       {keyword}
-                      <X className="h-3 w-3 cursor-pointer" onClick={() => removeExcludedKeyword(keyword)} />
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() => removeExcludedKeyword(keyword)}
+                      />
                     </Badge>
                   ))}
                 </div>
@@ -357,7 +480,9 @@ export default function InvestorSettingsPage() {
                     placeholder="e.g., B2C, consumer, retail"
                     value={newExcludedKeyword}
                     onChange={(e) => setNewExcludedKeyword(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && addExcludedKeyword()}
+                    onKeyPress={(e) =>
+                      e.key === "Enter" && addExcludedKeyword()
+                    }
                   />
                   <Button onClick={addExcludedKeyword} size="sm">
                     <Plus className="h-4 w-4" />
@@ -368,11 +493,19 @@ export default function InvestorSettingsPage() {
 
             {/* Save Button */}
             <div className="flex gap-4">
-              <Button onClick={handleSave} disabled={isSaving} className="flex-1">
+              <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="flex-1"
+              >
                 <Save className="h-4 w-4 mr-2" />
                 {isSaving ? "Saving..." : "Save Investment Thesis"}
               </Button>
-              <Button variant="outline" onClick={triggerReMatching} disabled={isSaving}>
+              <Button
+                variant="outline"
+                onClick={triggerReMatching}
+                disabled={isSaving}
+              >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Re-match Existing Deals
               </Button>
@@ -381,5 +514,5 @@ export default function InvestorSettingsPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

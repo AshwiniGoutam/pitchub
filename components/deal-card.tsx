@@ -83,16 +83,16 @@ export function DealCard({ startup, onStatusUpdate }: DealCardProps) {
   }
 
   return (
-    <Card className="group relative overflow-hidden bg-gradient-to-br from-white to-slate-50/50 dark:from-slate-800 dark:to-slate-900/50 border-2 border-slate-200/50 dark:border-slate-700/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 hover:scale-[1.01] backdrop-blur-sm">
+    <Card className="group relative overflow-hidden border-2 border-slate-200/50 bg-white">
       {startup.relevanceScore >= 80 && (
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+        <div className="absolute inset-0 bg-[#fff] pointer-events-none" />
       )}
 
-      <CardHeader className="relative pb-4">
+      <CardHeader className="relative pb-0">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-3">
-              <h3 className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
+            <div className="flex items-center gap-3 mb-2">
+              <h3 className="text-3xl font-bold text-foreground group-hover:text-primary transition-colors">
                 {startup.name}
               </h3>
               <Badge variant="outline" className={cn("font-medium capitalize", getStatusColor(startup.status))}>
@@ -139,7 +139,7 @@ export function DealCard({ startup, onStatusUpdate }: DealCardProps) {
       </CardHeader>
 
       <CardContent className="relative">
-        <p className="text-muted-foreground mb-6 line-clamp-2 leading-relaxed">{startup.description}</p>
+        <p className="text-muted-foreground mb-2 line-clamp-2 leading-relaxed">{startup.description}</p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-slate-50/50 dark:bg-slate-800/50 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
           <div className="flex items-center gap-2 text-sm">
@@ -171,12 +171,12 @@ export function DealCard({ startup, onStatusUpdate }: DealCardProps) {
             className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/25"
           >
             <Mail className="h-4 w-4 mr-2" />
-            Contact Founder
+            Mail Founder
           </Button>
           <Button
             variant="outline"
             size="sm"
-            className="border-2 hover:bg-slate-50 dark:hover:bg-slate-800 bg-transparent"
+            className="border-2 bg-transparent"
           >
             <Eye className="h-4 w-4 mr-2" />
             View Details
