@@ -3,7 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
-import { UserProvider } from "@/context/UserContext";
+import Providers from "./providers";
 
 export const metadata: Metadata = {
   title: "Pitchub",
@@ -20,11 +20,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        <UserProvider>
-          {" "}
-          {children}
-          <Analytics />
-        </UserProvider>
+        {/* <SessionProvider>
+            {" "}
+            {children}
+            <Analytics />
+        </SessionProvider> */}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
