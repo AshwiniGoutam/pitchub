@@ -4,6 +4,8 @@ import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import Providers from "./providers";
+import { UserProvider } from "@/context/UserContext";
+// import 'bootstrap/dist/css/bootstrap.min.css';
 
 export const metadata: Metadata = {
   title: "Pitchub",
@@ -25,7 +27,9 @@ export default function RootLayout({
             {children}
             <Analytics />
         </SessionProvider> */}
-        <Providers>{children}</Providers>
+        <Providers>
+          <UserProvider>{children}</UserProvider>
+        </Providers>
       </body>
     </html>
   );

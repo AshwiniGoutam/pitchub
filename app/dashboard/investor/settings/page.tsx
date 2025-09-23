@@ -46,18 +46,18 @@ export default function InvestorSettingsPage() {
   
 
 useEffect(() => {
-  if (user?._id) {
+  if (user?.id) {
     fetchInvestorThesis()
   }
 }, [user])
 
 
   const fetchInvestorThesis = async () => {
-    if (!user?._id) return;
+    if (!user?.id) return;
     try {
       const response = await fetch("/api/investor/thesis", {
         headers: {
-          "x-user-id": user._id, // ✅ pass user ID
+          "x-user-id": user.id, // ✅ pass user ID
         },
       });
       if (response.ok) {
@@ -72,7 +72,7 @@ useEffect(() => {
   };
 
   const handleSave = async () => {
-    if (!user?._id) return;
+    if (!user?.id) return;
     setIsSaving(true);
     setMessage("");
 
@@ -81,7 +81,7 @@ useEffect(() => {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "x-user-id": user._id, // ✅ pass user ID
+          "x-user-id": user.id, // ✅ pass user ID
         },
         body: JSON.stringify(thesis),
       });
