@@ -278,7 +278,8 @@ export default function InboxPage() {
               </div>
             )}
 
-            <Dialog>
+         {selectedEmail && <div className="pitch-details-btns">
+              <Dialog>
               <DialogTrigger asChild>
                 <Button className="mt-4 bg-blue-600 hover:bg-blue-700 text-white">
                   View Pitch Deck Summary
@@ -333,6 +334,7 @@ export default function InboxPage() {
                 </Card>
               </DialogContent>
             </Dialog>
+          </div>}
           </div>
         </div>
       </div>
