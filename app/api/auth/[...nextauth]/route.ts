@@ -9,63 +9,68 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly",
+          scope:
+            "openid email profile https://www.googleapis.com/auth/gmail.readonly",
         },
       },
     }),
   ],
+  pages: {
+    signIn: "/auth/login", // 👈 custom login page
+  },
 
- callbacks: {
-  async jwt({ token, account, user }) {
-    // Store Google access token
-    if (account?.access_token) {
-      token.accessToken = account.access_token;
-    }
-
-    // On first sign-in, store MongoDB _id and full user
-    if (user?.email && !token.fullUser) {
-      try {
-        const db = await getDatabase();
-        const dbUser = await db.collection("users").findOne({ email: user.email });
-        if (dbUser) {
-          token.id = dbUser._id.toString();      // store MongoDB _id
-          token.fullUser = dbUser;               // store full MongoDB user
-        }
-      } catch (err) {
-        console.error("JWT callback error:", err);
+  callbacks: {
+    async jwt({ token, account, user }) {
+      // Store Google access token
+      if (account?.access_token) {
+        token.accessToken = account.access_token;
       }
-    }
 
-    return token;
+      // On first sign-in, store MongoDB _id and full user
+      if (user?.email && !token.fullUser) {
+        try {
+          const db = await getDatabase();
+          const dbUser = await db
+            .collection("users")
+            .findOne({ email: user.email });
+          if (dbUser) {
+            token.id = dbUser._id.toString(); // store MongoDB _id
+            token.fullUser = dbUser; // store full MongoDB user
+          }
+        } catch (err) {
+          console.error("JWT callback error:", err);
+        }
+      }
+
+      return token;
+    },
+
+    async session({ session, token }) {
+      session.accessToken = token.accessToken as string;
+
+      if (token.fullUser) {
+        const dbUser = token.fullUser;
+        session.user = {
+          id: dbUser._id.toString(),
+          name: dbUser.name,
+          email: dbUser.email,
+          image: dbUser.picture,
+          provider: dbUser.provider,
+          investorProfile: dbUser.investorProfile,
+          checkSize: dbUser.checkSize,
+          excludedKeywords: dbUser.excludedKeywords,
+          geographies: dbUser.geographies,
+          keywords: dbUser.keywords,
+          sectors: dbUser.sectors,
+          stagePreference: dbUser.stagePreference,
+          createdAt: dbUser.createdAt,
+          updatedAt: dbUser.updatedAt,
+        };
+      }
+
+      return session;
+    },
   },
-
-  async session({ session, token }) {
-    session.accessToken = token.accessToken as string;
-
-    if (token.fullUser) {
-      const dbUser = token.fullUser;
-      session.user = {
-        id: dbUser._id.toString(),
-        name: dbUser.name,
-        email: dbUser.email,
-        image: dbUser.picture,
-        provider: dbUser.provider,
-        investorProfile: dbUser.investorProfile,
-        checkSize: dbUser.checkSize,
-        excludedKeywords: dbUser.excludedKeywords,
-        geographies: dbUser.geographies,
-        keywords: dbUser.keywords,
-        sectors: dbUser.sectors,
-        stagePreference: dbUser.stagePreference,
-        createdAt: dbUser.createdAt,
-        updatedAt: dbUser.updatedAt,
-      };
-    }
-
-    return session;
-  },
-},
-
 
   events: {
     async signIn({ user, account }: { user: any; account: Account | null }) {
@@ -73,7 +78,9 @@ export const authOptions: NextAuthOptions = {
         const db = await getDatabase();
 
         // Check if user exists
-        const existingUser = await db.collection("users").findOne({ email: user.email });
+        const existingUser = await db
+          .collection("users")
+          .findOne({ email: user.email });
 
         if (!existingUser) {
           // Save new user (like your POST API)

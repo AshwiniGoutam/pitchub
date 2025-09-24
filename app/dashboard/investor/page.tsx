@@ -69,86 +69,86 @@ export default function InvestorDashboard() {
     filterStartups();
   }, [startups, searchTerm, sectorFilter, stageFilter]);
 
-  // const fetchDashboardData = async () => {
-  //   try {
-  //     const [statsResponse, startupsResponse] = await Promise.all([
-  //       fetch("/api/investor/stats"),
-  //       fetch("/api/investor/startups"),
-  //     ]);
-
-  //     if (statsResponse.ok) {
-  //       const statsData = await statsResponse.json();
-  //       setStats(statsData);
-  //     }
-
-  //     if (startupsResponse.ok) {
-  //       const startupsData = await startupsResponse.json();
-  //       setStartups(startupsData);
-  //     }
-  //   } catch (error) {
-  //     console.error("Error fetching dashboard data:", error);
-  //   } finally {
-  //     setIsLoading(false);
-  //   }
-  // };
-
   const fetchDashboardData = async () => {
     try {
-      // Dummy stats
-      const statsData: DashboardStats = {
-        totalPitches: 12,
-        newThisWeek: 3,
-        underReview: 5,
-        contacted: 2,
-      };
-      setStats(statsData);
+      const [statsResponse, startupsResponse] = await Promise.all([
+        fetch("/api/investor/stats"),
+        fetch("/api/investor/startups"),
+      ]);
 
-      // Dummy startups
-      const startupsData: Startup[] = [
-        {
-          _id: "1",
-          name: "FinMate",
-          sector: "Fintech",
-          stage: "Seed",
-          location: "Bangalore, India",
-          fundingRequirement: { min: 50000, max: 150000 },
-          relevanceScore: 85,
-          status: "under_review",
-          createdAt: new Date().toISOString(),
-          description: "AI-powered financial advisor for millennials.",
-        },
-        {
-          _id: "2",
-          name: "HealthifyAI",
-          sector: "HealthTech",
-          stage: "Series A",
-          location: "San Francisco, USA",
-          fundingRequirement: { min: 200000, max: 500000 },
-          relevanceScore: 92,
-          status: "contacted",
-          createdAt: new Date().toISOString(),
-          description: "Predictive health analytics using wearable data.",
-        },
-        {
-          _id: "3",
-          name: "EduPro",
-          sector: "EdTech",
-          stage: "Pre-Seed",
-          location: "Delhi, India",
-          fundingRequirement: { min: 10000, max: 50000 },
-          relevanceScore: 60,
-          status: "new",
-          createdAt: new Date().toISOString(),
-          description: "Interactive learning platform for K12 students.",
-        },
-      ];
-      setStartups(startupsData);
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        setStats(statsData);
+      }
+
+      if (startupsResponse.ok) {
+        const startupsData = await startupsResponse.json();
+        setStartups(startupsData);
+      }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // const fetchDashboardData = async () => {
+  //   try {
+  //     // Dummy stats
+  //     const statsData: DashboardStats = {
+  //       totalPitches: 12,
+  //       newThisWeek: 3,
+  //       underReview: 5,
+  //       contacted: 2,
+  //     };
+  //     setStats(statsData);
+
+  //     // Dummy startups
+  //     const startupsData: Startup[] = [
+  //       {
+  //         _id: "1",
+  //         name: "FinMate",
+  //         sector: "Fintech",
+  //         stage: "Seed",
+  //         location: "Bangalore, India",
+  //         fundingRequirement: { min: 50000, max: 150000 },
+  //         relevanceScore: 85,
+  //         status: "under_review",
+  //         createdAt: new Date().toISOString(),
+  //         description: "AI-powered financial advisor for millennials.",
+  //       },
+  //       {
+  //         _id: "2",
+  //         name: "HealthifyAI",
+  //         sector: "HealthTech",
+  //         stage: "Series A",
+  //         location: "San Francisco, USA",
+  //         fundingRequirement: { min: 200000, max: 500000 },
+  //         relevanceScore: 92,
+  //         status: "contacted",
+  //         createdAt: new Date().toISOString(),
+  //         description: "Predictive health analytics using wearable data.",
+  //       },
+  //       {
+  //         _id: "3",
+  //         name: "EduPro",
+  //         sector: "EdTech",
+  //         stage: "Pre-Seed",
+  //         location: "Delhi, India",
+  //         fundingRequirement: { min: 10000, max: 50000 },
+  //         relevanceScore: 60,
+  //         status: "new",
+  //         createdAt: new Date().toISOString(),
+  //         description: "Interactive learning platform for K12 students.",
+  //       },
+  //     ];
+  //     setStartups(startupsData);
+  //   } catch (error) {
+  //     console.error("Error fetching dashboard data:", error);
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
 
   const filterStartups = () => {
     let filtered = startups;
