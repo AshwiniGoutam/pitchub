@@ -23,6 +23,7 @@ import {
 import { InvestorSidebar } from "@/components/investor-sidebar";
 import { DealCard } from "@/components/deal-card";
 import { StatsCard } from "@/components/stats-card";
+import InvestmentNews from "@/components/new-articles";
 
 interface DashboardStats {
   totalPitches: number;
@@ -264,7 +265,7 @@ export default function InvestorDashboard() {
             />
           </div>
 
-          <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6 mb-8">
+          {/* <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6 mb-8">
             <div className="flex items-center gap-3 mb-4">
               <Filter className="h-5 w-5 text-primary" />
               <h2 className="text-lg font-semibold">Filter & Search</h2>
@@ -413,7 +414,9 @@ export default function InvestorDashboard() {
                   ))}
               </div>
             </TabsContent>
-          </Tabs>
+          </Tabs> */}
+
+          <InvestmentNews/>
         </div>
       </div>
     </div>
