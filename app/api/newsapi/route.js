@@ -30,7 +30,7 @@ export async function GET(req) {
         // Fetch articles from NewsAPI
         const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(
             query
-        )}&language=en&sortBy=publishedAt&ppageSize=100&page=1&apiKey=62623f184b7f4005b81acf4e3479cea1`;
+        )}&language=en&sortBy=publishedAt&ppageSize=100&page=1&apiKey=${process.env.NEWSAPI_KEY}`;
 
         const res = await fetch(url);
         const data = await res.json();
