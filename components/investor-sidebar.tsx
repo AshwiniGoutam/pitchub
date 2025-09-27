@@ -21,8 +21,9 @@ import { signOut } from "next-auth/react";
 const navigation = [
   { name: "Dashboard", href: "/dashboard/investor", icon: LayoutDashboard },
   { name: "Inbox", href: "/dashboard/investor/inbox", icon: Inbox },
-  { name: "Analytics", href: "/dashboard/investor/analytics", icon: BarChart3 },
-  { name: "Email Setup", href: "/dashboard/investor/email", icon: Mail },
+  // { name: "Analytics", href: "/dashboard/investor/analytics", icon: BarChart3 },
+  { name: "Startups", href: "/dashboard/investor/startups", icon: Mail },
+  // { name: "Email Setup", href: "/dashboard/investor/email", icon: Mail },
   { name: "Profile", href: "/dashboard/investor/settings", icon: Settings },
 ];
 
