@@ -4,6 +4,7 @@ import { Features } from "@/components/pitchub/features";
 import { Why } from "@/components/pitchub/why";
 import { EarlyAccess } from "@/components/pitchub/early-access";
 import { SiteFooter } from "@/components/pitchub/site-footer";
+import BlogSection from "@/components/pitchub/blogs";
 
 export default function Page() {
   return (
@@ -48,6 +49,7 @@ export default function Page() {
         <Features />
         <Why />
         <EarlyAccess />
+        <BlogSection/>
       </main>
 
       <SiteFooter />

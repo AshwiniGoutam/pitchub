@@ -25,6 +25,7 @@ export function Hero() {
               Explore features
             </a>
           </div>
+          <p>Apply to the right investors and hear back in a week—no more cold emails. Present, manage, and track fundraising with ease.</p>
         </div>
 
         <div className="relative">
