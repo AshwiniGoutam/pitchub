@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 export function Hero() {
   return (
@@ -15,7 +16,7 @@ export function Hero() {
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild size="lg">
-              <a href="#early-access">Join the Waitlist</a>
+              <Link href="/dashboard/founder/submit">Join the Waitlist</Link>
             </Button>
             <a
               href="#features"

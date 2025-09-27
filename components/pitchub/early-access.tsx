@@ -1,5 +1,6 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 export function EarlyAccess() {
   return (
@@ -21,7 +22,7 @@ export function EarlyAccess() {
             </CardContent>
             <CardFooter>
               <Button asChild>
-                <a href="/waitlist/founder">Join as Founder</a>
+                <Link href="/dashboard/founder/submit">Join as Founder</Link>
               </Button>
             </CardFooter>
           </Card>
@@ -36,7 +37,7 @@ export function EarlyAccess() {
             </CardContent>
             <CardFooter>
               <Button asChild>
-                <a href="/waitlist/investor">Join as Investor</a>
+                <Link href="/dashboard/founder/submit">Join as Investor</Link>
               </Button>
             </CardFooter>
           </Card>
