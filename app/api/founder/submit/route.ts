@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate basic relevance score (this would be enhanced with AI matching)
-    const relevanceScore = calculateRelevanceScore(sector, stage, fundingMin, fundingMax)
+    const relevanceScore = await calculateRelevanceScore(sector, stage, fundingMin, fundingMax)
 
     // Create startup object
     const startupData: Partial<Startup> = {
@@ -62,10 +62,10 @@ export async function POST(request: NextRequest) {
 
     // Add optional fields
     if (website) {
-      ;(startupData as any).website = website
+      ; (startupData as any).website = website
     }
     if (teamSize) {
-      ;(startupData as any).teamSize = Number.parseInt(teamSize)
+      ; (startupData as any).teamSize = Number.parseInt(teamSize)
     }
 
     const db = await getDatabase()
@@ -74,8 +74,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       message: "Pitch submitted successfully",
       startupId: result.insertedId,
-      relevanceScore,
+      relevanceScore, // now this is a number
     })
+
   } catch (error) {
     console.error("Error submitting pitch:", error)
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
@@ -83,28 +84,53 @@ export async function POST(request: NextRequest) {
 }
 
 // Basic relevance scoring algorithm (would be enhanced with AI)
-function calculateRelevanceScore(sector: string, stage: string, fundingMin: number, fundingMax: number): number {
-  let score = 50 // Base score
+// Dynamic relevance scoring based on investor preferences
+async function calculateRelevanceScore(
+  sector: string,
+  stage: string,
+  fundingMin: number,
+  fundingMax: number
+): Promise<number> {
+  const db = await getDatabase()
 
-  // Sector scoring (popular sectors get higher scores)
-  const popularSectors = ["Fintech", "AI/ML", "SaaS", "HealthTech"]
-  if (popularSectors.includes(sector)) {
-    score += 20
-  }
+  // 🔹 Replace with actual logged-in investor ID
+  const investorId = "investor-temp-id"
 
-  // Stage scoring (early stages are more common)
-  if (stage === "Seed" || stage === "Pre-Seed") {
-    score += 15
-  } else if (stage === "Series A") {
-    score += 10
-  }
+  let score = 50 // default base score
 
-  // Funding range scoring (reasonable ranges get higher scores)
-  const avgFunding = (fundingMin + fundingMax) / 2
-  if (avgFunding >= 100000 && avgFunding <= 2000000) {
-    score += 15
+  try {
+    const investorProfile = await db
+      .collection("startups")
+      .findOne({ _id: new (require("mongodb").ObjectId)(investorId) })
+
+    if (!investorProfile) return score // fallback if no investor found
+
+    // Sector match
+    if (investorProfile.sectors?.includes(sector)) score += 30
+
+    // Stage match
+    if (investorProfile.stages?.includes(stage)) score += 25
+
+    // Funding range overlap
+    if (investorProfile.fundingRange) {
+      const overlap =
+        Math.min(fundingMax, investorProfile.fundingRange.max) -
+        Math.max(fundingMin, investorProfile.fundingRange.min)
+      if (overlap > 0) score += 25
+    }
+
+    // Location match
+    if (investorProfile.locations?.includes("any")) score += 15 // optional default
+    else if (investorProfile.locations?.includes(location)) score += 15
+
+    // Team size match (optional)
+    if (investorProfile.maxTeamSize && fundingMax <= investorProfile.maxTeamSize) score += 5
+
+  } catch (error) {
+    console.error("Error calculating relevance:", error)
   }
 
   // Ensure score is between 0 and 100
   return Math.min(100, Math.max(0, score))
 }
+
