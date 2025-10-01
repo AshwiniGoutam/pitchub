@@ -265,7 +265,7 @@ export default function PitchubLanding() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-10 justify-center mb-6">
+                <div className="flex items-center flex-wrap gap-10 justify-center mb-6">
                   <div className="flex items-center gap-3">
                     <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" />
                     <span className="text-muted-foreground">Early access notification</span>
