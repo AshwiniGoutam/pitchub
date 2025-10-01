@@ -319,9 +319,8 @@ export default function PitchubLanding() {
               </div>
             </div>
 
-            <div className="border-t border-background/20 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-background/60">
+            <div className="border-t border-background/20 pt-8 flex flex-col md:flex-row justify-center items-center gap-4 text-sm text-background/60">
               <p>© 2025 Pitchub. All rights reserved.</p>
-              <p>Made with Emergent</p>
             </div>
           </div>
         </div>
