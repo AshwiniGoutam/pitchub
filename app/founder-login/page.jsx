@@ -5,12 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 export default function AfterLogin() {
-    const { data: session } = useSession();
+    const { data: session, status } = useSession(); // track loading status
     const router = useRouter();
     const searchParams = useSearchParams();
-    const role = searchParams.get("role"); // founder OR investor
 
     useEffect(() => {
+        if (status === "loading") return; // wait until session is loaded
+
+        const role = searchParams.get("role"); // founder OR investor
+
         if (session?.user) {
             if (role === "founder") {
                 router.replace("/dashboard/founder/submit");
@@ -18,7 +21,7 @@ export default function AfterLogin() {
                 router.replace("/dashboard/investor");
             }
         }
-    }, [session, role, router]);
+    }, [session, status, searchParams, router]);
 
     return <p>Redirecting...</p>;
 }
