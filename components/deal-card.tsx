@@ -83,16 +83,16 @@ export function DealCard({ startup, onStatusUpdate }: DealCardProps) {
   }
 
   return (
-    <Card className="group relative overflow-hidden border-2 border-slate-200/50 bg-white">
+    <Card className="group relative overflow-hidden border-0 bg-white">
       {startup.relevanceScore >= 80 && (
         <div className="absolute inset-0 bg-[#fff] pointer-events-none" />
       )}
 
       <CardHeader className="relative pb-0">
         <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <h3 className="text-3xl font-bold text-foreground group-hover:text-primary transition-colors">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-3">
+              <h3 className="text-2xl font-bold text-foreground transition-colors">
                 {startup.name}
               </h3>
               <Badge variant="outline" className={cn("font-medium capitalize", getStatusColor(startup.status))}>
@@ -112,7 +112,7 @@ export function DealCard({ startup, onStatusUpdate }: DealCardProps) {
               </div>
             </div>
           </div>
-          <DropdownMenu>
+          {/* <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
                 <MoreHorizontal className="h-4 w-4" />
@@ -134,7 +134,7 @@ export function DealCard({ startup, onStatusUpdate }: DealCardProps) {
                 Mark as Rejected
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu> */}
         </div>
       </CardHeader>
 
@@ -168,7 +168,7 @@ export function DealCard({ startup, onStatusUpdate }: DealCardProps) {
           <Button
             size="sm"
             onClick={() => onStatusUpdate(startup._id, "contacted")}
-            className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/25"
+            className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
           >
             <Mail className="h-4 w-4 mr-2" />
             Mail Founder
@@ -176,7 +176,7 @@ export function DealCard({ startup, onStatusUpdate }: DealCardProps) {
           <Button
             variant="outline"
             size="sm"
-            className="border-2 bg-transparent"
+            className="border-0"
           >
             <Eye className="h-4 w-4 mr-2" />
             View Details
