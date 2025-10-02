@@ -1,21 +1,33 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getDatabase } from "@/lib/mongodb"
+import { getServerSession } from "next-auth"
+import { authOptions } from "../../auth/[...nextauth]/route"
 
 export async function GET(request: NextRequest) {
   try {
+    // ✅ 1. Get logged-in user
+    const session = await getServerSession(authOptions)
+
+    if (!session || !session.user?.email) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+    }
+
     const db = await getDatabase()
 
-    // Note: In a real app, you'd filter by the authenticated founder's ID
-    const founderId = "temp-founder-id" // This should come from session
+    // ✅ 2. Use logged-in user’s email as founderId
+    const founderId = session.user.email
 
-    // Aggregate statistics
+    // ✅ 3. Aggregate statistics in parallel
     const [totalSubmissions, underReview, contacted, avgScoreResult] = await Promise.all([
       db.collection("startups").countDocuments({ founderId }),
       db.collection("startups").countDocuments({ founderId, status: "under_review" }),
       db.collection("startups").countDocuments({ founderId, status: "contacted" }),
       db
         .collection("startups")
-        .aggregate([{ $match: { founderId } }, { $group: { _id: null, avgScore: { $avg: "$relevanceScore" } } }])
+        .aggregate([
+          { $match: { founderId } },
+          { $group: { _id: null, avgScore: { $avg: "$relevanceScore" } } },
+        ])
         .toArray(),
     ])
 

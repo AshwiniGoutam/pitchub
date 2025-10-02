@@ -5,24 +5,32 @@
 
 :root {
   /* Updated color scheme to match Pitchub blue branding */
-  --background: oklch(1 0 0); /* white */
-  --foreground: oklch(0.2 0.02 255); /* dark navy #1a1f3a */
-  --card: oklch(0.98 0.01 240); /* light blue tint #f8f9ff */
+  --background: oklch(1 0 0);
+  /* white */
+  --foreground: oklch(0.2 0.02 255);
+  /* dark navy #1a1f3a */
+  --card: oklch(0.98 0.01 240);
+  /* light blue tint #f8f9ff */
   --card-foreground: oklch(0.2 0.02 255);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.2 0.02 255);
-  --primary: oklch(0.55 0.25 255); /* bright blue #0066FF */
+  --primary: oklch(0.55 0.25 255);
+  /* bright blue #0066FF */
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.97 0.01 240); /* very light blue #f0f4ff */
+  --secondary: oklch(0.97 0.01 240);
+  /* very light blue #f0f4ff */
   --secondary-foreground: oklch(0.2 0.02 255);
   --muted: oklch(0.96 0.01 240);
   --muted-foreground: oklch(0.5 0.01 255);
-  --accent: oklch(0.65 0.22 255); /* lighter blue accent #3399FF */
+  --accent: oklch(0.65 0.22 255);
+  /* lighter blue accent #3399FF */
   --accent-foreground: oklch(1 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.92 0 0); /* light gray #e5e7eb */
-  --input: oklch(0.98 0 0); /* #f9fafb */
+  --border: oklch(0.92 0 0);
+  /* light gray #e5e7eb */
+  --input: oklch(0.98 0 0);
+  /* #f9fafb */
   --ring: oklch(0.55 0.25 255);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -120,7 +128,20 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+}
+
+
+.data-\[placeholder\]\:text-muted-foreground {
+  width: 100%;
+}
+
+.success-alert-box {
+  position: absolute !important;
+  top: 13% !important;
+  left: auto !important;
+  width: 80% !important;
 }

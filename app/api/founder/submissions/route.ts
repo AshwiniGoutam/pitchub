@@ -1,20 +1,33 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getDatabase } from "@/lib/mongodb"
+import { getServerSession } from "next-auth"
+import { authOptions } from "../../auth/[...nextauth]/route"
 
 export async function GET(request: NextRequest) {
   try {
+    // ✅ 1. Get logged-in user
+    const session = await getServerSession(authOptions)
+
+    if (!session || !session.user?.email) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+    }
+
     const db = await getDatabase()
 
-    // Note: In a real app, you'd filter by the authenticated founder's ID
-    const founderId = "temp-founder-id" // This should come from session
+    // ✅ 2. Use logged-in user’s email as founderId
+    const founderId = session.user.email
 
-    // Fetch founder's submissions
-    const submissions = await db.collection("startups").find({ founderId }).sort({ createdAt: -1 }).toArray()
+    // ✅ 3. Fetch founder’s submissions
+    const submissions = await db
+      .collection("startups")
+      .find({ founderId })
+      .sort({ createdAt: -1 })
+      .toArray()
 
-    // Add mock investor responses count (would be real data in production)
+    // ✅ 4. Add mock investor responses (optional)
     const submissionsWithResponses = submissions.map((submission) => ({
       ...submission,
-      investorResponses: Math.floor(Math.random() * 5), // Mock data
+      investorResponses: Math.floor(Math.random() * 5), // mock data
     }))
 
     return NextResponse.json(submissionsWithResponses)

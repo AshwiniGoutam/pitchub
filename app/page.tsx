@@ -1,3 +1,4 @@
+'use client'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,7 +13,9 @@ import {
   Rocket,
   Mail,
 } from "lucide-react"
+import { signIn } from "next-auth/react"
 import Image from "next/image"
+import Link from "next/link"
 
 export default function PitchubLanding() {
   return (
@@ -23,7 +26,17 @@ export default function PitchubLanding() {
           <div className="flex items-center gap-3">
             <Image src="/images/logo.png" alt="Pitchub" width={180} height={40} className="h-10 w-auto" />
           </div>
-          <Button className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium px-4 py-2">Join Waitlist</Button>
+          {/* <Button className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium px-4 py-2">Join Waitlist</Button> */}
+          <button
+            className="bg-primary rounded-lg inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium px-4 py-2 text-white cursor-pointer"
+            onClick={() =>
+              signIn("google", {
+                callbackUrl: "/founder-login?role=founder",
+              })
+            }
+          >
+            Join the Waitlist
+          </button>
         </div>
       </header>
 
@@ -71,9 +84,20 @@ export default function PitchubLanding() {
                 <span>Actionable insights, not just data</span>
               </div>
             </div>
-            <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground text-lg px-8 py-6">
+            {/* <Link href={"/dashboard/founder/submit"} className="bg-primary rounded-lg hover:bg-primary/90 text-primary-foreground text-md px-4 py-3">
               Join the Waitlist
-            </Button>
+            </Link> */}
+            <button
+              className="bg-primary rounded-lg hover:bg-primary/90 text-primary-foreground text-md px-4 py-3 cursor-pointer"
+              onClick={() =>
+                signIn("google", {
+                  callbackUrl: "/founder-login?role=founder",
+                })
+              }
+            >
+              Join the Waitlist
+            </button>
+
           </div>
         </div>
       </section>

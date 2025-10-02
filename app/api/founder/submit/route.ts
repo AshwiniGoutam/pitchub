@@ -2,12 +2,20 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getDatabase } from "@/lib/mongodb"
 import { uploadToCloudinary } from "@/lib/cloudinary"
 import type { Startup } from "@/lib/types"
+import { getServerSession } from "next-auth"
+import { authOptions } from "../../auth/[...nextauth]/route"
 
 export async function POST(request: NextRequest) {
   try {
+    // ✅ 1. Get logged-in user
+    const session = await getServerSession(authOptions)
+    if (!session || !session.user?.email) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+    }
+
+    // ✅ 2. Extract form data
     const formData = await request.formData()
 
-    // Extract form fields
     const name = formData.get("name") as string
     const sector = formData.get("sector") as string
     const stage = formData.get("stage") as string
@@ -19,14 +27,12 @@ export async function POST(request: NextRequest) {
     const teamSize = formData.get("teamSize") as string
     const pitchDeckFile = formData.get("pitchDeck") as File
 
-    // Validate required fields
     if (!name || !sector || !stage || !location || !fundingMin || !fundingMax || !description) {
       return NextResponse.json({ message: "All required fields must be filled" }, { status: 400 })
     }
 
+    // ✅ 3. Upload pitch deck (if exists)
     let pitchDeckUrl = ""
-
-    // Upload pitch deck to Cloudinary if provided
     if (pitchDeckFile && pitchDeckFile.size > 0) {
       try {
         const uploadResult = await uploadToCloudinary(pitchDeckFile, "pitch-decks")
@@ -37,11 +43,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Calculate basic relevance score (this would be enhanced with AI matching)
-    const relevanceScore = await calculateRelevanceScore(sector, stage, fundingMin, fundingMax)
+    // ✅ 4. Relevance score (placeholder or AI matching later)
+    const relevanceScore = 50 // baseline or your algorithm
 
-    // Create startup object
-    const startupData: Partial<Startup> = {
+    // ✅ 5. Create startup document
+    const startupData: Omit<Partial<Startup>, "_id"> & { teamSize?: number } = {
       name,
       sector,
       stage,
@@ -56,81 +62,26 @@ export async function POST(request: NextRequest) {
       status: "submitted",
       createdAt: new Date(),
       updatedAt: new Date(),
-      // Note: founderId would come from authenticated user session
-      founderId: "temp-founder-id", // This should be replaced with actual user ID from session
+      founderId: session.user.email, // 👈 now linked to Gmail user
     }
 
-    // Add optional fields
-    if (website) {
-      ; (startupData as any).website = website
-    }
-    if (teamSize) {
-      ; (startupData as any).teamSize = Number.parseInt(teamSize)
-    }
+    // Ensure _id is not present to avoid type conflict
+    delete (startupData as any)._id;
 
+    if (website) (startupData as any).website = website
+    if (teamSize) startupData.teamSize = Number.parseInt(teamSize)
+
+    // ✅ 6. Insert into DB
     const db = await getDatabase()
     const result = await db.collection("startups").insertOne(startupData)
 
     return NextResponse.json({
       message: "Pitch submitted successfully",
       startupId: result.insertedId,
-      relevanceScore, // now this is a number
+      relevanceScore,
     })
-
   } catch (error) {
     console.error("Error submitting pitch:", error)
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
   }
 }
-
-// Basic relevance scoring algorithm (would be enhanced with AI)
-// Dynamic relevance scoring based on investor preferences
-async function calculateRelevanceScore(
-  sector: string,
-  stage: string,
-  fundingMin: number,
-  fundingMax: number
-): Promise<number> {
-  const db = await getDatabase()
-
-  // 🔹 Replace with actual logged-in investor ID
-  const investorId = "investor-temp-id"
-
-  let score = 50 // default base score
-
-  try {
-    const investorProfile = await db
-      .collection("startups")
-      .findOne({ _id: new (require("mongodb").ObjectId)(investorId) })
-
-    if (!investorProfile) return score // fallback if no investor found
-
-    // Sector match
-    if (investorProfile.sectors?.includes(sector)) score += 30
-
-    // Stage match
-    if (investorProfile.stages?.includes(stage)) score += 25
-
-    // Funding range overlap
-    if (investorProfile.fundingRange) {
-      const overlap =
-        Math.min(fundingMax, investorProfile.fundingRange.max) -
-        Math.max(fundingMin, investorProfile.fundingRange.min)
-      if (overlap > 0) score += 25
-    }
-
-    // Location match
-    if (investorProfile.locations?.includes("any")) score += 15 // optional default
-    else if (investorProfile.locations?.includes(location)) score += 15
-
-    // Team size match (optional)
-    if (investorProfile.maxTeamSize && fundingMax <= investorProfile.maxTeamSize) score += 5
-
-  } catch (error) {
-    console.error("Error calculating relevance:", error)
-  }
-
-  // Ensure score is between 0 and 100
-  return Math.min(100, Math.max(0, score))
-}
-
