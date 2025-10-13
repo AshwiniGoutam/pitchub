@@ -1,41 +1,13 @@
 "use client";
-
 import { useEffect, useState } from "react";
-import { Card } from "@/components/ui/card";
+import { Bell, X, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Search,
-  Filter,
-  Star,
-  Archive,
-  Trash2,
-  Reply,
-  Forward,
-  MoreHorizontal,
-  Paperclip,
-  Calendar,
-  Building,
-  MapPin,
-  DollarSign,
-  TrendingUp,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-} from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useRouter } from "next/navigation";
 import { InvestorSidebar } from "@/components/investor-sidebar";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import DOMPurify from "dompurify";
 
 interface Email {
@@ -69,11 +41,18 @@ interface Email {
 }
 
 export default function InboxPage() {
+  const router = useRouter();
+
   const [emails, setEmails] = useState<Email[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+
+  const [emailSummaries, setEmailSummaries] = useState<Record<string, string>>(
+    {}
+  );
+  const [summaryLoading, setSummaryLoading] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchEmails() {
@@ -107,236 +86,251 @@ export default function InboxPage() {
     return matchesSearch && matchesFilter;
   });
 
-  function cleanEmailBody(body: string) {
-    const noStyle = body.replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, ""); // remove <style> blocks
-    const noClasses = noStyle.replace(/\sclass="[^"]*"/gi, ""); // strip classes
-    return DOMPurify.sanitize(noClasses, { USE_PROFILES: { html: true } });
+  const fetchEmailSummary = async (email: Email) => {
+    if (emailSummaries[email.id]) return; // Already fetched
+
+    setSummaryLoading(email.id);
+    try {
+      const res = await fetch("/api/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: email.content, title: email.subject }),
+      });
+
+      if (!res.ok) throw new Error("Failed to get summary");
+
+      const data = await res.json();
+      setEmailSummaries((prev) => ({ ...prev, [email.id]: data.summary }));
+    } catch (err) {
+      console.error(err);
+      setEmailSummaries((prev) => ({
+        ...prev,
+        [email.id]: "Failed to generate summary.",
+      }));
+    } finally {
+      setSummaryLoading(null);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedEmail) {
+      fetchEmailSummary(selectedEmail);
+    }
+  }, [selectedEmail]);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen">
+        <InvestorSidebar />
+        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
+            <p className="text-muted-foreground text-lg">
+              Loading Inbox...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="h-screen flex">
+    <div className="flex h-screen bg-gray-50">
       <InvestorSidebar />
 
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="border-b bg-white p-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-800">Inbox</h1>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input
-                placeholder="Search emails..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 w-72"
-              />
-            </div>
-            <Button variant="outline" size="sm">
-              <Filter className="w-4 h-4 mr-2" />
-              Filter
-            </Button>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="border-b bg-gray-50 px-4 py-2">
-          <Tabs value={activeFilter} onValueChange={setActiveFilter}>
-            <TabsList className="grid grid-cols-6">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="unread">Unread</TabsTrigger>
-              <TabsTrigger value="starred">Starred</TabsTrigger>
-              <TabsTrigger value="new">New</TabsTrigger>
-              <TabsTrigger value="interested">Interested</TabsTrigger>
-              <TabsTrigger value="rejected">Rejected</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-
-        {/* Layout */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Email List */}
-          <div className="w-1/3 border-r bg-white p-4 w-[400px]">
-            {loading ? (
-              <p className="text-gray-500">Loading emails...</p>
-            ) : (
-              <div className="h-full overflow-y-scroll">
-                {filteredEmails.map((email) => (
-                  <Card
-                    key={email.id}
-                    className={`p-4 mb-4 mx-1 mt-2 border-b cursor-pointer ${
-                      selectedEmail?.id === email.id
-                        ? "bg-blue-50 ring-1 ring-blue-300"
-                        : "hover:bg-gray-50"
-                    }`}
-                    onClick={() => setSelectedEmail(email)}
-                  >
-                    <div className="flex gap-2 justify-between items-start">
-                      <div className="flex gap-3">
-                        <Avatar className="w-8 h-8">
-                          <AvatarImage
-                            src={`https://api.dicebear.com/7.x/initials/svg?seed=${email.from}`}
-                          />
-                          <AvatarFallback>{email.from[0]}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p
-                            className={`text-sm ${
-                              !email.isRead ? "font-bold" : "font-medium"
-                            }`}
-                          >
-                            {email.from}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {email.fromEmail}
-                          </p>
-                        </div>
-                      </div>
-                      <Star
-                        className={`w-4 h-4 cursor-pointer ${
-                          email.isStarred
-                            ? "text-yellow-400 fill-yellow-400"
-                            : "text-gray-300"
-                        }`}
-                      />
-                    </div>
-                    <h3 className="truncate mt-1">{email.subject}</h3>
-
-                    {/* <p className="text-xs text-gray-600 line-clamp-1">
-                      {email.body}
-                    </p> */}
-                  </Card>
-                ))}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Inbox List */}
+        <div
+          className={`${
+            selectedEmail ? "w-2/3" : "w-full"
+          } overflow-auto border-r bg-white transition-all`}
+        >
+          {/* Header */}
+          <header className="sticky top-0 z-10 border-b bg-white">
+            <div className="flex h-16 items-center justify-between px-8">
+              <div>
+                <h1 className="text-2xl font-bold">Inbox</h1>
+                <p className="text-sm text-gray-600">
+                  An overview of your deal flow activity.
+                </p>
               </div>
-            )}
-          </div>
+              <Button variant="ghost" size="icon">
+                <Bell className="h-5 w-5" />
+              </Button>
+            </div>
+          </header>
 
-          {/* Email Details */}
-          <div className="flex-1 p-6 overflow-y-auto w-[600px]">
-            {selectedEmail ? (
-              <>
-                <div className="flex justify-between items-start border-b pb-4 mb-4">
-                  <div>
-                    <h2 className="text-lg font-semibold">
-                      {selectedEmail.subject}
-                    </h2>
-                    <p className="text-sm text-gray-500">
-                      From: {selectedEmail.from}
+          {/* Table */}
+          {/* Inbox Table (Emails) */}
+          <div className="p-8">
+            <div className="overflow-hidden rounded-lg border">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      From
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Sector
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Relevance
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Status
+                    </th>
+                    {/* <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Date
+                    </th> */}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {filteredEmails.map((email) => (
+                    <tr
+                      key={email.id}
+                      onClick={() => setSelectedEmail(email)}
+                      className={`cursor-pointer transition-colors hover:bg-gray-50 ${
+                        selectedEmail?.id === email.id ? "bg-emerald-50" : ""
+                      }`}
+                    >
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                        {email.from}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {email.sector}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Progress
+                            value={email.relevanceScore}
+                            className="h-2 w-24"
+                          />
+                          <span className="text-sm font-medium">
+                            {email.relevanceScore}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Badge
+                          className={`${
+                            email?.status == "Contacted"
+                              ? "bg-blue-100 text-blue-700"
+                              : email?.status == "Under Evaluation"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : email?.status == "Pending"
+                              ? "bg-red-100 text-red-700"
+                              : email?.status == "New"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : ""
+                          }`}
+                        >
+                          {email.status}
+                        </Badge>
+                      </td>
+                      {/* <td className="px-6 py-4 text-sm text-gray-500">
+                        {new Date(email.timestamp).toLocaleString()}
+                      </td> */}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Pitch Detail Panel */}
+        {selectedEmail && (
+          <div className="w-1/3 overflow-auto bg-white p-6">
+            <div className="mb-6 flex items-start justify-between">
+              <h2 className="text-2xl font-bold">{selectedEmail.subject}</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedEmail(null)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <Tabs defaultValue="pitch-deck" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="pitch-deck">Pitch Deck</TabsTrigger>
+                <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
+              </TabsList>
+              <TabsContent value="pitch-deck" className="space-y-6">
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="mb-4 flex h-48 items-center justify-center rounded-lg bg-gray-100">
+                      <p className="text-gray-400">Pitch Deck Preview</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div>
+                  <h3 className="mb-3 font-semibold">AI-Generated Summary</h3>
+                  {summaryLoading === selectedEmail?.id ? (
+                    <p className="text-sm text-gray-600">
+                      Generating summary...
                     </p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(selectedEmail.date).toLocaleString()}
+                  ) : (
+                    <p className="text-sm text-gray-600">
+                      {selectedEmail
+                        ? emailSummaries[selectedEmail.id] ||
+                          "No summary available."
+                        : ""}
                     </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="ghost" size="sm">
-                      <Archive className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  )}
                 </div>
 
-                {/* <div
-                  className="prose whitespace-pre-wrap text-gray-700"
-                  dangerouslySetInnerHTML={{ __html: selectedEmail.body }}
-                /> */}
-                <div
-                  className="prose whitespace-pre-wrap text-gray-700"
-                  dangerouslySetInnerHTML={{
-                    __html: cleanEmailBody(selectedEmail.body),
-                  }}
-                />
-
-                {/* Attachments */}
-                {selectedEmail.attachments.length > 0 && (
-                  <div className="mt-4">
-                    <h3 className="text-sm font-semibold mb-2">Attachments</h3>
-                    <ul className="space-y-2">
-                      {selectedEmail.attachments.map((att, idx) => (
-                        <li
-                          key={idx}
-                          className="text-sm text-blue-600 underline"
-                        >
-                          <a
-                            href={`data:${att.mimeType};base64,${att.data}`}
-                            download={att.filename}
-                          >
-                            {att.filename}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="h-full flex items-center justify-center text-gray-500">
-                Select an email to view details
-              </div>
-            )}
-
-         {selectedEmail && <div className="pitch-details-btns">
-              <Dialog>
-              <DialogTrigger asChild>
-                <Button className="mt-4 bg-blue-600 hover:bg-blue-700 text-white">
-                  View Pitch Deck Summary
+                <Button className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700">
+                  <Download className="h-4 w-4" />
+                  Download Pitch Deck
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-lg">
-                <Card className="mt-4 p-4 border-blue-200 bg-blue-50">
-                  <h3 className="text-sm font-semibold mb-2">
-                    Pitch Deck Summary
-                  </h3>
-                  <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
-                    <li>300% revenue growth in last 12 months</li>
-                    <li>15+ partnerships with major hospitals</li>
-                    <li>FDA approval for diagnostic algorithm</li>
-                    <li>Strong customer retention & product-market fit</li>
-                  </ul>
+
+                <div className="flex gap-3">
+                  <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700">
+                    Accept
+                  </Button>
+                  <Button variant="outline" className="flex-1 bg-transparent">
+                    Reject
+                  </Button>
+                </div>
+              </TabsContent>
+              <TabsContent value="ai-insights" className="space-y-6">
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="mb-3 font-semibold">Competitive Analysis</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1 h-2 w-2 rounded-full bg-emerald-500" />
+                        <p className="text-sm text-gray-600">
+                          Higher efficiency than current market leaders.
+                        </p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1 h-2 w-2 rounded-full bg-red-500" />
+                        <p className="text-sm text-gray-600">
+                          Manufacturing costs are currently higher.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
                 </Card>
-              </DialogContent>
-            </Dialog>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="mt-2 ml-4 border-green-600 text-green-600 hover:bg-green-50"
-                >
-                  View Competitive Analysis
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-lg">
-                <Card className="mt-4 p-4 border-green-200 bg-green-50">
-                  <h3 className="text-sm font-semibold mb-3">
-                    Competitive Analysis
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="font-medium">MedAI Solutions</span>
-                      <span className="text-green-600">Series A • $5M</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Competitor: HealthIQ</span>
-                      <span>Series B • $25M</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Competitor: AI Diagnostics</span>
-                      <span>Seed • $2M</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Competitor: MediTech</span>
-                      <span>Series A • $8M</span>
-                    </div>
-                  </div>
+
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="mb-3 font-semibold">Market Research</h3>
+                    <p className="text-sm text-gray-600">
+                      The renewable energy market is projected to grow by 15%
+                      annually. Government incentives for green technology
+                      provide a favorable environment for market entry.
+                    </p>
+                  </CardContent>
                 </Card>
-              </DialogContent>
-            </Dialog>
-          </div>}
+              </TabsContent>
+            </Tabs>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

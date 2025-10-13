@@ -1,29 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import {
-  Mail,
-  TrendingUp,
-  Users,
-  Clock,
-  Search,
-  Filter,
-  BarChart3,
-} from "lucide-react";
+import { Bell, Calendar } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { InvestorSidebar } from "@/components/investor-sidebar";
-import { DealCard } from "@/components/deal-card";
-import { StatsCard } from "@/components/stats-card";
-import InvestmentNews from "@/components/new-articles";
+import { useEffect, useState } from "react";
 
 interface DashboardStats {
   totalPitches: number;
@@ -48,7 +32,7 @@ interface Startup {
   description: string;
 }
 
-export default function InvestorDashboard() {
+export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     totalPitches: 0,
     newThisWeek: 0,
@@ -93,64 +77,6 @@ export default function InvestorDashboard() {
     }
   };
 
-  // const fetchDashboardData = async () => {
-  //   try {
-  //     // Dummy stats
-  //     const statsData: DashboardStats = {
-  //       totalPitches: 12,
-  //       newThisWeek: 3,
-  //       underReview: 5,
-  //       contacted: 2,
-  //     };
-  //     setStats(statsData);
-
-  //     // Dummy startups
-  //     const startupsData: Startup[] = [
-  //       {
-  //         _id: "1",
-  //         name: "FinMate",
-  //         sector: "Fintech",
-  //         stage: "Seed",
-  //         location: "Bangalore, India",
-  //         fundingRequirement: { min: 50000, max: 150000 },
-  //         relevanceScore: 85,
-  //         status: "under_review",
-  //         createdAt: new Date().toISOString(),
-  //         description: "AI-powered financial advisor for millennials.",
-  //       },
-  //       {
-  //         _id: "2",
-  //         name: "HealthifyAI",
-  //         sector: "HealthTech",
-  //         stage: "Series A",
-  //         location: "San Francisco, USA",
-  //         fundingRequirement: { min: 200000, max: 500000 },
-  //         relevanceScore: 92,
-  //         status: "contacted",
-  //         createdAt: new Date().toISOString(),
-  //         description: "Predictive health analytics using wearable data.",
-  //       },
-  //       {
-  //         _id: "3",
-  //         name: "EduPro",
-  //         sector: "EdTech",
-  //         stage: "Pre-Seed",
-  //         location: "Delhi, India",
-  //         fundingRequirement: { min: 10000, max: 50000 },
-  //         relevanceScore: 60,
-  //         status: "new",
-  //         createdAt: new Date().toISOString(),
-  //         description: "Interactive learning platform for K12 students.",
-  //       },
-  //     ];
-  //     setStartups(startupsData);
-  //   } catch (error) {
-  //     console.error("Error fetching dashboard data:", error);
-  //   } finally {
-  //     setIsLoading(false);
-  //   }
-  // };
-
   const filterStartups = () => {
     let filtered = startups;
 
@@ -173,34 +99,6 @@ export default function InvestorDashboard() {
     setFilteredStartups(filtered);
   };
 
-  const handleStatusUpdate = async (startupId: string, newStatus: string) => {
-    try {
-      const response = await fetch(
-        `/api/investor/startups/${startupId}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ status: newStatus }),
-        }
-      );
-
-      if (response.ok) {
-        setStartups((prev) =>
-          prev.map((startup) =>
-            startup._id === startupId
-              ? { ...startup, status: newStatus }
-              : startup
-          )
-        );
-        fetchDashboardData(); // Refresh stats
-      }
-    } catch (error) {
-      console.error("Error updating status:", error);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex h-screen">
@@ -216,208 +114,230 @@ export default function InvestorDashboard() {
       </div>
     );
   }
-
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+    <div className="flex h-screen bg-gray-50">
       <InvestorSidebar />
 
       <div className="flex-1 overflow-auto">
-        <div className="p-8 max-w-7xl mx-auto">
-          <div className="mb-10">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-foreground mb-2">
-                Welcome User
-              </h1>
-              <p className="text-muted-foreground">
-                Manage and analyze your startup deal pipeline
-              </p>
+        {/* Header */}
+        <header className="sticky top-0 z-10 border-b bg-white">
+          <div className="flex h-16 items-center justify-between px-8">
+            <h1 className="text-2xl font-bold">Dashboard</h1>
+            <div className="flex items-center gap-4">
+              <Button variant="outline" className="gap-2 bg-transparent">
+                <Calendar className="h-4 w-4" />
+                Date Range
+              </Button>
+              <Button variant="ghost" size="icon">
+                <Bell className="h-5 w-5" />
+              </Button>
             </div>
           </div>
+        </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
-            <StatsCard
-              title="Total Pitches"
-              value={stats.totalPitches}
-              icon={<Mail className="h-5 w-5" />}
-              trend="+12% from last month"
-              color="blue"
-            />
-            <StatsCard
-              title="New This Week"
-              value={stats.newThisWeek}
-              icon={<TrendingUp className="h-5 w-5" />}
-              trend="+5 from last week"
-              color="green"
-            />
-            <StatsCard
-              title="Under Review"
-              value={stats.underReview}
-              icon={<Clock className="h-5 w-5" />}
-              trend="3 pending decisions"
-              color="orange"
-            />
-            <StatsCard
-              title="Contacted"
-              value={stats.contacted}
-              icon={<Users className="h-5 w-5" />}
-              trend="8 meetings scheduled"
-              color="purple"
-            />
-          </div>
+        {/* Main Content */}
+        <main className="p-8">
+          {/* <p className="mb-8 text-gray-600">Here's your quality deal snapshot.</p> */}
 
-          {/* <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6 mb-8">
-            <div className="flex items-center gap-3 mb-4">
-              <Filter className="h-5 w-5 text-primary" />
-              <h2 className="text-lg font-semibold">Filter & Search</h2>
-            </div>
-            <div className="flex flex-col lg:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5" />
-                <Input
-                  placeholder="Search startups by name or description..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-12 h-12 bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-700 rounded-xl"
-                />
-              </div>
-              <Select value={sectorFilter} onValueChange={setSectorFilter}>
-                <SelectTrigger className="w-full lg:w-56 h-12 py-5.5 bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-700 rounded-xl">
-                  <SelectValue placeholder="All Sectors" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sectors</SelectItem>
-                  <SelectItem value="Fintech">Fintech</SelectItem>
-                  <SelectItem value="HealthTech">HealthTech</SelectItem>
-                  <SelectItem value="EdTech">EdTech</SelectItem>
-                  <SelectItem value="AI/ML">AI/ML</SelectItem>
-                  <SelectItem value="E-commerce">E-commerce</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={stageFilter} onValueChange={setStageFilter}>
-                <SelectTrigger className="w-full lg:w-56 h-12 py-5.5 bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-700 rounded-xl">
-                  <SelectValue placeholder="All Stages" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Stages</SelectItem>
-                  <SelectItem value="Pre-Seed">Pre-Seed</SelectItem>
-                  <SelectItem value="Seed">Seed</SelectItem>
-                  <SelectItem value="Series A">Series A</SelectItem>
-                  <SelectItem value="Series B">Series B</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <Tabs defaultValue="all" className="space-y-8">
-            <div className="flex items-center justify-between">
-              <TabsList className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 p-1 h-12 rounded-xl">
-                <TabsTrigger
-                  value="all"
-                  className="px-6 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                >
-                  All Deals
-                </TabsTrigger>
-                <TabsTrigger
-                  value="high-relevance"
-                  className="px-6 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                >
-                  High Relevance
-                </TabsTrigger>
-                <TabsTrigger
-                  value="under-review"
-                  className="px-6 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                >
-                  Under Review
-                </TabsTrigger>
-                <TabsTrigger
-                  value="contacted"
-                  className="px-6 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                >
-                  Contacted
-                </TabsTrigger>
-              </TabsList>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <BarChart3 className="h-4 w-4" />
-                <span>{filteredStartups.length} deals found</span>
-              </div>
-            </div>
-
-            <TabsContent value="all" className="space-y-6">
-              {filteredStartups.length === 0 ? (
-                <Card className="border-dashed border-2 border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50">
-                  <CardContent className="flex items-center justify-center py-16">
-                    <div className="text-center max-w-md">
-                      <div className="bg-gradient-to-br from-primary/20 to-primary/10 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
-                        <Mail className="h-12 w-12 text-primary" />
-                      </div>
-                      <h3 className="text-xl font-semibold mb-3">
-                        No startups found
-                      </h3>
-                      <p className="text-muted-foreground leading-relaxed">
-                        Try adjusting your filters or connect your email to
-                        start receiving pitches and building your deal flow.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid gap-6">
-                  {filteredStartups.map((startup) => (
-                    <DealCard
-                      key={startup._id}
-                      startup={startup}
-                      onStatusUpdate={handleStatusUpdate}
-                    />
-                  ))}
+          <div className="grid gap-6 lg:grid-cols-3">
+            {/* Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <p className="text-sm text-gray-500">Total Pitches</p>
+                  <p className="text-4xl font-bold">{stats.totalPitches}</p>
                 </div>
-              )}
-            </TabsContent>
 
-            <TabsContent value="high-relevance" className="space-y-6">
-              <div className="grid gap-6">
-                {filteredStartups
-                  .filter((startup) => startup.relevanceScore >= 80)
-                  .map((startup) => (
-                    <DealCard
-                      key={startup._id}
-                      startup={startup}
-                      onStatusUpdate={handleStatusUpdate}
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-sm text-gray-500">Quality Deal Flow</p>
+                    <Badge
+                      variant="secondary"
+                      className="bg-emerald-50 text-emerald-700"
+                    >
+                      +5% ↑
+                    </Badge>
+                  </div>
+                  <p className="text-4xl font-bold">76</p>
+                  <div className="mt-4 h-16">
+                    <svg viewBox="0 0 200 50" className="w-full">
+                      <path
+                        d="M 0,25 Q 50,15 100,20 T 200,25"
+                        fill="none"
+                        stroke="rgb(16 185 129)"
+                        strokeWidth="2"
+                      />
+                    </svg>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-500">Reviewed</p>
+                  <p className="text-4xl font-bold">{stats.underReview}</p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-500">Contacted</p>
+                  <p className="text-4xl font-bold">{stats.contacted}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Deal Flow by Sector */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Deal Flow by Sector</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-6 flex items-center justify-center">
+                  <svg viewBox="0 0 200 200" className="h-48 w-48">
+                    <circle cx="100" cy="100" r="80" fill="rgb(16 185 129)" />
+                    <path
+                      d="M 100,100 L 100,20 A 80,80 0 0,1 180,100 Z"
+                      fill="rgb(59 130 246)"
                     />
-                  ))}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="under-review" className="space-y-6">
-              <div className="grid gap-6">
-                {filteredStartups
-                  .filter((startup) => startup.status === "under_review")
-                  .map((startup) => (
-                    <DealCard
-                      key={startup._id}
-                      startup={startup}
-                      onStatusUpdate={handleStatusUpdate}
+                    <path
+                      d="M 100,100 L 180,100 A 80,80 0 0,1 140,170 Z"
+                      fill="rgb(234 179 8)"
                     />
-                  ))}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="contacted" className="space-y-6">
-              <div className="grid gap-6">
-                {filteredStartups
-                  .filter((startup) => startup.status === "contacted")
-                  .map((startup) => (
-                    <DealCard
-                      key={startup._id}
-                      startup={startup}
-                      onStatusUpdate={handleStatusUpdate}
+                    <path
+                      d="M 100,100 L 140,170 A 80,80 0 0,1 60,170 Z"
+                      fill="rgb(239 68 68)"
                     />
-                  ))}
-              </div>
-            </TabsContent>
-          </Tabs> */}
+                  </svg>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-full bg-emerald-500" />
+                      <span>FinTech</span>
+                    </div>
+                    <span className="text-gray-500">(35%)</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-full bg-blue-500" />
+                      <span>HealthTech</span>
+                    </div>
+                    <span className="text-gray-500">(30%)</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-full bg-yellow-500" />
+                      <span>SaaS</span>
+                    </div>
+                    <span className="text-gray-500">(20%)</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-full bg-red-500" />
+                      <span>DeepTech</span>
+                    </div>
+                    <span className="text-gray-500">(15%)</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-          <InvestmentNews/>
-        </div>
+            {/* Funding Round & Lead Investor Status */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Funding Round</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm text-gray-600">First Round</span>
+                    <span className="text-sm font-semibold">60%</span>
+                  </div>
+                  <Progress value={60} className="h-2" />
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Follow-on</span>
+                    <span className="text-sm font-semibold">40%</span>
+                  </div>
+                  <Progress value={40} className="h-2 [&>div]:bg-blue-500" />
+                </div>
+
+                <div className="pt-4">
+                  <h3 className="mb-4 font-semibold">Lead Investor Status</h3>
+                  <div className="flex items-end justify-center gap-8">
+                    <div className="text-center">
+                      <div className="mb-2 h-32 w-16 rounded-lg bg-emerald-500" />
+                      <p className="text-sm text-gray-600">Yes</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="mb-2 h-24 w-16 rounded-lg bg-red-200" />
+                      <p className="text-sm text-gray-600">No</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* What's New Today */}
+          <div className="my-8">
+            <h2 className="mb-4 text-xl font-bold text-gray-900">
+              What's New Today
+            </h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardContent className="flex items-center gap-4 p-4">
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback className="bg-gray-200">IT</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold text-gray-900">InnovateTech</p>
+                    <p className="text-sm text-gray-500">New pitch</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="flex items-center gap-4 p-4">
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback className="bg-gray-200">QL</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold text-gray-900">QuantumLeap</p>
+                    <p className="text-sm text-gray-500">Founder replied</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="flex items-center gap-4 p-4">
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback className="bg-gray-200">ES</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold text-gray-900">EcoSolutions</p>
+                    <p className="text-sm text-gray-500">Follow-up</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="flex items-center gap-4 p-4">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src="/placeholder.svg?height=48&width=48" />
+                    <AvatarFallback>DS</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold text-gray-900">DataSphere</p>
+                    <p className="text-sm text-gray-500">New pitch</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );

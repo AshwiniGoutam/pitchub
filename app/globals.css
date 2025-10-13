@@ -134,7 +134,6 @@
   }
 }
 
-
 .data-\[placeholder\]\:text-muted-foreground {
   width: 100%;
 }
@@ -144,4 +143,12 @@
   top: 13% !important;
   left: auto !important;
   width: 80% !important;
+}
+
+.bg-primary-light {
+  background-color: #0066fd12 !important;
+}
+
+.text-primary {
+  color: #0066fd !important;
 }

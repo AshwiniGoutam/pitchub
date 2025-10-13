@@ -2,6 +2,41 @@ import NextAuth, { type NextAuthOptions, type Account } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { getDatabase } from "@/lib/mongodb";
 
+// 🧠 Helper function: refresh Google access token
+async function refreshAccessToken(token: any) {
+  try {
+    const url =
+      "https://oauth2.googleapis.com/token?" +
+      new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID!,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        grant_type: "refresh_token",
+        refresh_token: token.refreshToken!,
+      });
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+
+    const refreshedTokens = await response.json();
+
+    if (!response.ok) throw refreshedTokens;
+
+    console.log("✅ Access token refreshed successfully");
+
+    return {
+      ...token,
+      accessToken: refreshedTokens.access_token,
+      accessTokenExpires: Date.now() + refreshedTokens.expires_in * 1000, // new expiry
+      refreshToken: refreshedTokens.refresh_token ?? token.refreshToken, // reuse old one if missing
+    };
+  } catch (error) {
+    console.error("Error refreshing access token:", error);
+    return { ...token, error: "RefreshAccessTokenError" };
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
@@ -11,108 +46,74 @@ export const authOptions: NextAuthOptions = {
         params: {
           scope:
             "openid email profile https://www.googleapis.com/auth/gmail.readonly",
+          access_type: "offline", // ✅ Required to get refresh token
+          prompt: "consent", // ✅ Always ask for refresh token (first login)
         },
       },
     }),
   ],
+
   pages: {
-    signIn: "/auth/login", // 👈 custom login page
+    signIn: "/auth/login",
   },
 
   callbacks: {
     async jwt({ token, account, user }) {
-      // Store Google access token
-      if (account?.access_token) {
-        token.accessToken = account.access_token;
-      }
-
-      // On first sign-in, store MongoDB _id and full user
-      if (user?.email && !token.fullUser) {
-        try {
-          const db = await getDatabase();
-          const dbUser = await db
-            .collection("users")
-            .findOne({ email: user.email });
-          if (dbUser) {
-            token.id = dbUser._id.toString(); // store MongoDB _id
-            token.fullUser = dbUser; // store full MongoDB user
-          }
-        } catch (err) {
-          console.error("JWT callback error:", err);
-        }
-      }
-
-      return token;
-    },
-
-    async session({ session, token }) {
-      session.accessToken = token.accessToken as string;
-
-      if (token.fullUser) {
-        const dbUser = token.fullUser;
-        session.user = {
-          id: dbUser._id.toString(),
-          name: dbUser.name,
-          email: dbUser.email,
-          image: dbUser.picture,
-          provider: dbUser.provider,
-          investorProfile: dbUser.investorProfile,
-          checkSize: dbUser.checkSize,
-          excludedKeywords: dbUser.excludedKeywords,
-          geographies: dbUser.geographies,
-          keywords: dbUser.keywords,
-          sectors: dbUser.sectors,
-          stagePreference: dbUser.stagePreference,
-          createdAt: dbUser.createdAt,
-          updatedAt: dbUser.updatedAt,
-        };
-      }
-
-      return session;
-    },
-  },
-
-  events: {
-    async signIn({ user, account }: { user: any; account: Account | null }) {
-      try {
+      // 🧩 Initial login
+      if (account && user) {
         const db = await getDatabase();
 
-        // Check if user exists
-        const existingUser = await db
-          .collection("users")
-          .findOne({ email: user.email });
-
+        // Save / update user in DB
+        const existingUser = await db.collection("users").findOne({ email: user.email });
         if (!existingUser) {
-          // Save new user (like your POST API)
           await db.collection("users").insertOne({
             email: user.email,
             name: user.name,
             picture: user.image,
-            provider: account?.provider,
-            accessToken: account?.access_token,
+            provider: account.provider,
+            accessToken: account.access_token,
+            refreshToken: account.refresh_token,
             createdAt: new Date(),
             updatedAt: new Date(),
           });
-          console.log("New user saved to DB:", user.email);
         } else {
-          // Update existing user
           await db.collection("users").updateOne(
             { email: user.email },
             {
               $set: {
                 name: user.name,
                 picture: user.image,
-                provider: account?.provider,
-                accessToken: account?.access_token,
+                provider: account.provider,
+                accessToken: account.access_token,
+                refreshToken: account.refresh_token ?? existingUser.refreshToken,
                 updatedAt: new Date(),
               },
             }
           );
-          console.log("Existing user updated:", user.email);
         }
-      } catch (err) {
-        console.error("Error saving Google user to DB:", err);
+
+        return {
+          accessToken: account.access_token,
+          refreshToken: account.refresh_token,
+          accessTokenExpires: (account.expires_at as number) * 1000,
+          user,
+        };
       }
+
+      // 🕒 If the token is still valid, return it
+      if (Date.now() < (token.accessTokenExpires as number)) {
+        return token;
+      }
+
+      // 🪄 If expired, refresh token
+      return await refreshAccessToken(token);
+    },
+
+    async session({ session, token }) {
+      session.accessToken = token.accessToken as string;
+      session.error = token.error;
+      session.user = token.user;
+      return session;
     },
   },
 
