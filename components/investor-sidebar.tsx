@@ -23,7 +23,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard/investor", icon: LayoutDashboard },
   { name: "Inbox", href: "/dashboard/investor/inbox", icon: Inbox },
   { name: "Deals", href: "/dashboard/investor/startups", icon: Briefcase },
-  { name: "Market Research", href: "/", icon: TrendingUp },
+  { name: "Market Research", href: "/dashboard/investor/market-research", icon: TrendingUp },
   { name: "Settings", href: "/dashboard/investor/settings", icon: Settings },
   {
     name: "Portfolio",

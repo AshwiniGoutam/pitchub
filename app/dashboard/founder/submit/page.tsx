@@ -382,6 +382,7 @@ export default function SubmitPitchPage() {
                       <h3 className="text-lg font-semibold">
                         Funding Requirements
                       </h3>
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="fundingMin">
@@ -402,6 +403,7 @@ export default function SubmitPitchPage() {
                             </p>
                           )}
                         </div>
+
                         <div className="space-y-2">
                           <Label htmlFor="fundingMax">
                             Maximum Funding ($) *
@@ -418,6 +420,41 @@ export default function SubmitPitchPage() {
                           {errors.fundingMax && (
                             <p className="text-red-500 text-sm mt-1">
                               {errors.fundingMax}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ✅ Pitch Deck Upload Section */}
+                      <div className="space-y-2 mt-6">
+                        <Label htmlFor="pitchDeck">
+                          Pitch Deck (PDF, PPT, PPTX – max 10MB)
+                        </Label>
+                        <div
+                          className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:bg-muted/30 transition"
+                          onClick={() =>
+                            document.getElementById("pitchDeck")?.click()
+                          }
+                        >
+                          <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                          <p className="text-sm text-muted-foreground">
+                            {pitchDeck
+                              ? pitchDeck.name
+                              : "Click to upload or drag and drop"}
+                          </p>
+                          <Input
+                            id="pitchDeck"
+                            type="file"
+                            accept=".pdf,.ppt,.pptx"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) setPitchDeck(file);
+                            }}
+                          />
+                          {pitchDeck && (
+                            <p className="text-xs text-green-600 mt-2">
+                              ✅ {pitchDeck.name} selected
                             </p>
                           )}
                         </div>
@@ -474,6 +511,7 @@ export default function SubmitPitchPage() {
                         Back
                       </Button>
                     )}
+
                     {step < 3 ? (
                       <Button
                         type="button"
@@ -493,6 +531,7 @@ export default function SubmitPitchPage() {
                         {isLoading ? "Submitting..." : "Submit Pitch"}
                       </Button>
                     )}
+
                     <Link href="/">
                       <Button type="button" variant="outline">
                         Cancel
