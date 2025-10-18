@@ -72,7 +72,7 @@ export default function InboxPage() {
         if (!res.ok) throw new Error("Failed to fetch emails");
         const data = await res.json();
         setEmails(data);
-        setSelectedEmail(data[0] || null);
+        // Don't auto-select first email
       } catch (err) {
         console.error("Error fetching emails:", err);
       } finally {
@@ -136,11 +136,11 @@ export default function InboxPage() {
     }
   };
 
-  useEffect(() => {
-    if (selectedEmail) {
-      fetchEmailAnalysis(selectedEmail);
-    }
-  }, [selectedEmail]);
+  const handleEmailSelect = async (email: Email) => {
+    setSelectedEmail(email);
+    // Always fetch analysis when email is selected
+    await fetchEmailAnalysis(email);
+  };
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
@@ -230,10 +230,10 @@ export default function InboxPage() {
                       From
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Subject
+                      Sector
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Sector
+                      Relevance
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                       Status
@@ -246,7 +246,7 @@ export default function InboxPage() {
                     return (
                       <tr
                         key={email.id}
-                        onClick={() => setSelectedEmail(email)}
+                        onClick={() => handleEmailSelect(email)}
                         className={`cursor-pointer transition-colors hover:bg-gray-50 ${
                           selectedEmail?.id === email.id ? "bg-emerald-50" : ""
                         }`}
@@ -254,17 +254,23 @@ export default function InboxPage() {
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">
                           {email.from}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
-                          {email.subject}
-                        </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 text-sm text-gray-500">
                           {analysis ? (
-                            <Badge variant="outline" className="border-blue-200 text-blue-700">
-                              {analysis.sector}
-                            </Badge>
+                            analysis.sector
                           ) : (
-                            <span className="text-sm text-gray-400">Analyzing...</span>
+                            <span className="text-gray-400">Click to analyze</span>
                           )}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <Progress
+                              value={email.startup?.relevanceScore || 0}
+                              className="h-2 w-24"
+                            />
+                            <span className="text-sm font-medium">
+                              {email.startup?.relevanceScore || 0}%
+                            </span>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <Badge
@@ -295,289 +301,304 @@ export default function InboxPage() {
         {/* Email Detail Panel */}
         {selectedEmail && (
           <div className="w-1/3 overflow-auto bg-white p-6">
-            <div className="mb-6 flex items-start justify-between">
-              <div>
-                <h2 className="text-2xl font-bold">{selectedEmail.subject}</h2>
-                <p className="text-sm text-gray-600 mt-1">{selectedEmail.from}</p>
+            {/* Show loading state until analysis is complete */}
+            {analysisLoading === selectedEmail.id ? (
+              <div className="flex flex-col items-center justify-center h-full py-12">
+                <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">Analyzing Email</h3>
+                <p className="text-gray-600 text-center max-w-sm">
+                  Our AI is analyzing the email content to provide you with comprehensive insights, sector detection, and investment recommendations.
+                </p>
+                <div className="mt-6 w-full max-w-xs">
+                  <div className="flex justify-between text-sm text-gray-500 mb-1">
+                    <span>Processing...</span>
+                    <span>AI Analysis</span>
+                  </div>
+                  <Progress value={75} className="h-2" />
+                </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSelectedEmail(null)}
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
+            ) : (
+              <>
+                <div className="mb-6 flex items-start justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold">{selectedEmail.subject}</h2>
+                    <p className="text-sm text-gray-600 mt-1">{selectedEmail.from}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSelectedEmail(null)}
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
 
-            <Tabs defaultValue="ai-summary" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="ai-summary">AI Summary</TabsTrigger>
-                <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="ai-summary" className="space-y-6">
-                {analysisLoading === selectedEmail.id ? (
-                  <Card>
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-center py-8">
-                        <div className="text-center">
-                          <div className="animate-spin rounded-full h-8 w-8 border-4 border-primary border-t-transparent mx-auto mb-3"></div>
-                          <p className="text-sm text-gray-600">Analyzing email content...</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : emailAnalyses[selectedEmail.id] ? (
-                  <>
-                    {/* Executive Summary */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                          <Target className="h-5 w-5 text-blue-600" />
-                          Executive Summary
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-gray-700 leading-relaxed">
-                          {emailAnalyses[selectedEmail.id].summary}
-                        </p>
-                      </CardContent>
-                    </Card>
+                <Tabs defaultValue="ai-summary" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="ai-summary">AI Summary</TabsTrigger>
+                    <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="ai-summary" className="space-y-6">
+                    {emailAnalyses[selectedEmail.id] ? (
+                      <>
+                        {/* Executive Summary */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-lg">
+                              <Target className="h-5 w-5 text-blue-600" />
+                              Executive Summary
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm text-gray-700 leading-relaxed">
+                              {emailAnalyses[selectedEmail.id].summary}
+                            </p>
+                          </CardContent>
+                        </Card>
 
-                    {/* Key Metrics */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Key Metrics</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="text-center p-3 bg-blue-50 rounded-lg">
-                            <div className="text-sm text-blue-600 font-medium">Sector</div>
-                            <div className="text-lg font-bold text-blue-800">
-                              {emailAnalyses[selectedEmail.id].sector}
+                        {/* Key Metrics */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg">Key Metrics</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="text-center p-3 bg-blue-50 rounded-lg">
+                                <div className="text-sm text-blue-600 font-medium">Sector</div>
+                                <div className="text-lg font-bold text-blue-800">
+                                  {emailAnalyses[selectedEmail.id].sector}
+                                </div>
+                              </div>
+                              <div className="text-center p-3 bg-green-50 rounded-lg">
+                                <div className="text-sm text-green-600 font-medium">Growth Stage</div>
+                                <div className="text-lg font-bold text-green-800">
+                                  {emailAnalyses[selectedEmail.id].growthStage}
+                                </div>
+                              </div>
+                              <div className="text-center p-3 bg-orange-50 rounded-lg">
+                                <div className="text-sm text-orange-600 font-medium">Competitive Position</div>
+                                <div className="text-lg font-bold text-orange-800">
+                                  {emailAnalyses[selectedEmail.id].competitivePosition}
+                                </div>
+                              </div>
+                              <div className="text-center p-3 bg-purple-50 rounded-lg">
+                                <div className="text-sm text-purple-600 font-medium">Funding Mentioned</div>
+                                <div className="text-lg font-bold text-purple-800">
+                                  {emailAnalyses[selectedEmail.id].fundingMentioned ? "Yes" : "No"}
+                                </div>
+                              </div>
                             </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Key Points */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg">Key Points</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <ul className="space-y-2">
+                              {emailAnalyses[selectedEmail.id].keyPoints.map((point, index) => (
+                                <li key={index} className="flex items-start gap-2">
+                                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
+                                  <span className="text-sm text-gray-700">{point}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </CardContent>
+                        </Card>
+
+                        {/* Action Items */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg">Action Items</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <ul className="space-y-2">
+                              {emailAnalyses[selectedEmail.id].actionItems.map((action, index) => (
+                                <li key={index} className="flex items-start gap-2">
+                                  <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0" />
+                                  <span className="text-sm text-gray-700">{action}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </CardContent>
+                        </Card>
+                      </>
+                    ) : (
+                      <Card>
+                        <CardContent className="p-6">
+                          <div className="text-center py-8">
+                            <p className="text-sm text-gray-600 mb-4">
+                              Analysis not available. Please try selecting the email again.
+                            </p>
+                            <Button 
+                              onClick={() => handleEmailSelect(selectedEmail)}
+                            >
+                              Retry Analysis
+                            </Button>
                           </div>
-                          <div className="text-center p-3 bg-green-50 rounded-lg">
-                            <div className="text-sm text-green-600 font-medium">Growth Stage</div>
-                            <div className="text-lg font-bold text-green-800">
-                              {emailAnalyses[selectedEmail.id].growthStage}
+                        </CardContent>
+                      </Card>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="ai-insights" className="space-y-6">
+                    {emailAnalyses[selectedEmail.id] ? (
+                      <>
+                        {/* Risk & Sentiment Analysis */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-lg">
+                              <AlertTriangle className="h-5 w-5 text-orange-600" />
+                              Risk & Sentiment Analysis
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid grid-cols-2 gap-4 mb-4">
+                              <div className="text-center p-3 bg-red-50 rounded-lg">
+                                <div className="text-sm text-red-600 font-medium">Risk Level</div>
+                                <div className={`text-lg font-bold ${getRiskColor(emailAnalyses[selectedEmail.id].riskLevel)}`}>
+                                  {emailAnalyses[selectedEmail.id].riskLevel}
+                                </div>
+                              </div>
+                              <div className="text-center p-3 bg-blue-50 rounded-lg">
+                                <div className="text-sm text-blue-600 font-medium">Sentiment</div>
+                                <Badge className={getSentimentColor(emailAnalyses[selectedEmail.id].sentiment)}>
+                                  {emailAnalyses[selectedEmail.id].sentiment}
+                                </Badge>
+                              </div>
                             </div>
-                          </div>
-                          <div className="text-center p-3 bg-orange-50 rounded-lg">
-                            <div className="text-sm text-orange-600 font-medium">Competitive Position</div>
-                            <div className="text-lg font-bold text-orange-800">
-                              {emailAnalyses[selectedEmail.id].competitivePosition}
+                            <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                              <div className="text-sm text-yellow-600 font-medium">Urgency</div>
+                              <Badge className={getUrgencyColor(emailAnalyses[selectedEmail.id].urgency)}>
+                                {emailAnalyses[selectedEmail.id].urgency} Priority
+                              </Badge>
                             </div>
-                          </div>
-                          <div className="text-center p-3 bg-purple-50 rounded-lg">
-                            <div className="text-sm text-purple-600 font-medium">Funding Mentioned</div>
-                            <div className="text-lg font-bold text-purple-800">
-                              {emailAnalyses[selectedEmail.id].fundingMentioned ? "Yes" : "No"}
+                          </CardContent>
+                        </Card>
+
+                        {/* Investment Readiness */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-lg">
+                              <TrendingUp className="h-5 w-5 text-green-600" />
+                              Investment Readiness
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600">Growth Stage</span>
+                                <Badge className={getGrowthStageColor(emailAnalyses[selectedEmail.id].growthStage)}>
+                                  {emailAnalyses[selectedEmail.id].growthStage}
+                                </Badge>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600">Metrics Provided</span>
+                                <Badge className={emailAnalyses[selectedEmail.id].metricsMentioned ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
+                                  {emailAnalyses[selectedEmail.id].metricsMentioned ? "Yes" : "No"}
+                                </Badge>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600">Funding Discussion</span>
+                                <Badge className={emailAnalyses[selectedEmail.id].fundingMentioned ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"}>
+                                  {emailAnalyses[selectedEmail.id].fundingMentioned ? "Present" : "Not Mentioned"}
+                                </Badge>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                          </CardContent>
+                        </Card>
 
-                    {/* Key Points */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Key Points</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <ul className="space-y-2">
-                          {emailAnalyses[selectedEmail.id].keyPoints.map((point, index) => (
-                            <li key={index} className="flex items-start gap-2">
-                              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
-                              <span className="text-sm text-gray-700">{point}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </CardContent>
-                    </Card>
-
-                    {/* Action Items */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Action Items</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <ul className="space-y-2">
-                          {emailAnalyses[selectedEmail.id].actionItems.map((action, index) => (
-                            <li key={index} className="flex items-start gap-2">
-                              <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0" />
-                              <span className="text-sm text-gray-700">{action}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </CardContent>
-                    </Card>
-                  </>
-                ) : (
-                  <Card>
-                    <CardContent className="p-6">
-                      <p className="text-sm text-gray-600 text-center py-4">
-                        No analysis available. Click to analyze this email.
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-
-              <TabsContent value="ai-insights" className="space-y-6">
-                {emailAnalyses[selectedEmail.id] ? (
-                  <>
-                    {/* Risk & Sentiment Analysis */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                          <AlertTriangle className="h-5 w-5 text-orange-600" />
-                          Risk & Sentiment Analysis
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                          <div className="text-center p-3 bg-red-50 rounded-lg">
-                            <div className="text-sm text-red-600 font-medium">Risk Level</div>
-                            <div className={`text-lg font-bold ${getRiskColor(emailAnalyses[selectedEmail.id].riskLevel)}`}>
-                              {emailAnalyses[selectedEmail.id].riskLevel}
+                        {/* Sector Insights */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg">Sector Insights</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg">
+                              <h4 className="font-semibold text-blue-800 mb-2">{emailAnalyses[selectedEmail.id].sector} Sector</h4>
+                              <p className="text-sm text-blue-700">
+                                {emailAnalyses[selectedEmail.id].sector === "SaaS" && "High-margin business model with recurring revenue. Focus on MRR growth, customer acquisition costs, and churn rates."}
+                                {emailAnalyses[selectedEmail.id].sector === "FinTech" && "Regulatory compliance is key. Evaluate partnerships with financial institutions and user adoption metrics."}
+                                {emailAnalyses[selectedEmail.id].sector === "HealthTech" && "Long sales cycles but high barriers to entry. Check for FDA approvals and clinical validation."}
+                                {emailAnalyses[selectedEmail.id].sector === "AI/ML" && "Evaluate technical differentiation and IP protection. Talent acquisition and computational costs are critical."}
+                                {emailAnalyses[selectedEmail.id].sector === "E-commerce" && "Focus on unit economics, customer LTV, and scalability of customer acquisition strategies."}
+                                {!["SaaS", "FinTech", "HealthTech", "AI/ML", "E-commerce"].includes(emailAnalyses[selectedEmail.id].sector) && 
+                                  "Evaluate market size, competitive landscape, and unique value proposition. Consider scalability and defensibility."}
+                              </p>
                             </div>
-                          </div>
-                          <div className="text-center p-3 bg-blue-50 rounded-lg">
-                            <div className="text-sm text-blue-600 font-medium">Sentiment</div>
-                            <Badge className={getSentimentColor(emailAnalyses[selectedEmail.id].sentiment)}>
-                              {emailAnalyses[selectedEmail.id].sentiment}
-                            </Badge>
-                          </div>
-                        </div>
-                        <div className="text-center p-3 bg-yellow-50 rounded-lg">
-                          <div className="text-sm text-yellow-600 font-medium">Urgency</div>
-                          <Badge className={getUrgencyColor(emailAnalyses[selectedEmail.id].urgency)}>
-                            {emailAnalyses[selectedEmail.id].urgency} Priority
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
+                          </CardContent>
+                        </Card>
 
-                    {/* Investment Readiness */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                          <TrendingUp className="h-5 w-5 text-green-600" />
-                          Investment Readiness
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Growth Stage</span>
-                            <Badge className={getGrowthStageColor(emailAnalyses[selectedEmail.id].growthStage)}>
-                              {emailAnalyses[selectedEmail.id].growthStage}
-                            </Badge>
+                        {/* Next Steps */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-lg">
+                              <Clock className="h-5 w-5 text-purple-600" />
+                              Recommended Next Steps
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-3">
+                              {emailAnalyses[selectedEmail.id].urgency === "High" && (
+                                <p className="text-sm text-red-600 font-medium">🚨 Immediate attention required</p>
+                              )}
+                              <ul className="space-y-2">
+                                <li className="flex items-start gap-2">
+                                  <div className="w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                                  <span className="text-sm text-gray-700">
+                                    Schedule call within {emailAnalyses[selectedEmail.id].urgency === "High" ? "24 hours" : "this week"}
+                                  </span>
+                                </li>
+                                <li className="flex items-start gap-2">
+                                  <div className="w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                                  <span className="text-sm text-gray-700">
+                                    Request {!emailAnalyses[selectedEmail.id].metricsMentioned ? "detailed metrics and " : ""}financial projections
+                                  </span>
+                                </li>
+                                <li className="flex items-start gap-2">
+                                  <div className="w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                                  <span className="text-sm text-gray-700">
+                                    Conduct due diligence on {emailAnalyses[selectedEmail.id].sector} market dynamics
+                                  </span>
+                                </li>
+                              </ul>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </>
+                    ) : (
+                      <Card>
+                        <CardContent className="p-6">
+                          <div className="text-center py-8">
+                            <p className="text-sm text-gray-600 mb-4">
+                              No AI insights available.
+                            </p>
+                            <Button 
+                              onClick={() => handleEmailSelect(selectedEmail)}
+                            >
+                              Generate AI Insights
+                            </Button>
                           </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Metrics Provided</span>
-                            <Badge className={emailAnalyses[selectedEmail.id].metricsMentioned ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
-                              {emailAnalyses[selectedEmail.id].metricsMentioned ? "Yes" : "No"}
-                            </Badge>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Funding Discussion</span>
-                            <Badge className={emailAnalyses[selectedEmail.id].fundingMentioned ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"}>
-                              {emailAnalyses[selectedEmail.id].fundingMentioned ? "Present" : "Not Mentioned"}
-                            </Badge>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </TabsContent>
+                </Tabs>
 
-                    {/* Sector Insights */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Sector Insights</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg">
-                          <h4 className="font-semibold text-blue-800 mb-2">{emailAnalyses[selectedEmail.id].sector} Sector</h4>
-                          <p className="text-sm text-blue-700">
-                            {emailAnalyses[selectedEmail.id].sector === "SaaS" && "High-margin business model with recurring revenue. Focus on MRR growth, customer acquisition costs, and churn rates."}
-                            {emailAnalyses[selectedEmail.id].sector === "FinTech" && "Regulatory compliance is key. Evaluate partnerships with financial institutions and user adoption metrics."}
-                            {emailAnalyses[selectedEmail.id].sector === "HealthTech" && "Long sales cycles but high barriers to entry. Check for FDA approvals and clinical validation."}
-                            {emailAnalyses[selectedEmail.id].sector === "AI/ML" && "Evaluate technical differentiation and IP protection. Talent acquisition and computational costs are critical."}
-                            {emailAnalyses[selectedEmail.id].sector === "E-commerce" && "Focus on unit economics, customer LTV, and scalability of customer acquisition strategies."}
-                            {!["SaaS", "FinTech", "HealthTech", "AI/ML", "E-commerce"].includes(emailAnalyses[selectedEmail.id].sector) && 
-                              "Evaluate market size, competitive landscape, and unique value proposition. Consider scalability and defensibility."}
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* Next Steps */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                          <Clock className="h-5 w-5 text-purple-600" />
-                          Recommended Next Steps
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          {emailAnalyses[selectedEmail.id].urgency === "High" && (
-                            <p className="text-sm text-red-600 font-medium">🚨 Immediate attention required</p>
-                          )}
-                          <ul className="space-y-2">
-                            <li className="flex items-start gap-2">
-                              <div className="w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
-                              <span className="text-sm text-gray-700">
-                                Schedule call within {emailAnalyses[selectedEmail.id].urgency === "High" ? "24 hours" : "this week"}
-                              </span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <div className="w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
-                              <span className="text-sm text-gray-700">
-                                Request {!emailAnalyses[selectedEmail.id].metricsMentioned ? "detailed metrics and " : ""}financial projections
-                              </span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <div className="w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
-                              <span className="text-sm text-gray-700">
-                                Conduct due diligence on {emailAnalyses[selectedEmail.id].sector} market dynamics
-                              </span>
-                            </li>
-                          </ul>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </>
-                ) : (
-                  <Card>
-                    <CardContent className="p-6">
-                      <div className="text-center py-8">
-                        <p className="text-sm text-gray-600 mb-4">
-                          No AI insights available yet.
-                        </p>
-                        <Button 
-                          onClick={() => fetchEmailAnalysis(selectedEmail)}
-                          disabled={analysisLoading === selectedEmail.id}
-                        >
-                          {analysisLoading === selectedEmail.id ? "Analyzing..." : "Generate AI Insights"}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-            </Tabs>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3 mt-6">
-              <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700">
-                Accept & Schedule Call
-              </Button>
-              <Button variant="outline" className="flex-1">
-                Request More Info
-              </Button>
-            </div>
+                {/* Action Buttons */}
+                <div className="flex gap-3 mt-6">
+                  <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700">
+                    Accept & Schedule Call
+                  </Button>
+                  <Button variant="outline" className="flex-1">
+                    Request More Info
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
