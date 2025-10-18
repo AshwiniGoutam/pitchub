@@ -1,208 +1,85 @@
 "use client";
-
+import { useState, useEffect } from "react";
 import { Search, Filter, Bell, ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InvestorSidebar } from "@/components/investor-sidebar";
-import { useEffect, useState } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function MarketResearchPage() {
-  const [marketData, setMarketData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [trends, setTrends] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [newsItems, setNewsItems] = useState([]);
+  const [showAllTrends, setShowAllTrends] = useState(false);
+  const [showAllReports, setShowAllReports] = useState(false);
+  const [showAllNews, setShowAllNews] = useState(false);
+  const [selectedSector, setSelectedSector] = useState("All");
+
+  const sectors = [
+    "All",
+    "Technology",
+    "Healthcare",
+    "Finance",
+    "Energy",
+    "Consumer Goods",
+    "Real Estate",
+    "Entertainment",
+    "Science",
+    "Sports",
+  ];
 
   useEffect(() => {
-    fetchMarketData();
-  }, []);
+    const apiKey = process.env.NEXT_PUBLIC_NEWS_API_KEY;
 
-  const fetchMarketData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await fetch('/api/market-analysis');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch market data');
-      }
-      
-      const data = await response.json();
-      setMarketData(data);
-    } catch (error) {
-      console.error('Error fetching market data:', error);
-      setError('Failed to load market data. Please try again.');
-      
-      // Set fallback data
-      setMarketData(getFallbackData());
-    } finally {
-      setLoading(false);
+    if (!apiKey) {
+      console.error("News API key is missing.");
+      return;
     }
-  };
 
-  // Fallback data in case API fails
-  const getFallbackData = () => {
-    return {
-      news: {
-        all: [
-          {
-            title: "AI Startups Secure Record Funding in Q4 2024",
-            content: "Artificial intelligence companies continue to attract significant venture capital investments as the technology matures.",
-            source: "TechCrunch",
-            image: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=600&h=400&fit=crop",
-            published: new Date().toISOString(),
-            category: "technology"
-          },
-          {
-            title: "Sustainable Energy Investments Reach New High",
-            content: "Global investment in renewable energy projects hits record levels as climate tech gains momentum.",
-            source: "Reuters",
-            image: "https://images.unsplash.com/photo-1466611653911-95081537e5b7?w=600&h=400&fit=crop",
-            published: new Date().toISOString(),
-            category: "energy"
-          }
-        ],
-        categorized: {
-          ventureCapital: [
-            {
-              title: "VC Funding Shows Strong Momentum in Tech Sector",
-              content: "Early-stage startups in SaaS and AI continue to attract significant investor interest.",
-              source: "VC Circle",
-              image: "https://images.unsplash.com/photo-1559526324-5937fbd9ea81?w=600&h=400&fit=crop",
-              published: new Date().toISOString(),
-              category: "ventureCapital"
-            }
-          ],
-          technology: [
-            {
-              title: "The Future of Enterprise SaaS: Trends and Projections",
-              content: "Analysis of the evolving SaaS market with key investment opportunities.",
-              source: "Tech Analysis",
-              image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&h=400&fit=crop",
-              published: new Date().toISOString(),
-              category: "technology"
-            }
-          ]
-        }
-      },
-      analysis: {
-        marketSentiment: "Bullish",
-        keyTrends: [
-          "AI and Machine Learning investments surging",
-          "Climate tech gaining significant traction",
-          "Enterprise SaaS showing strong growth",
-          "Early-stage funding remains robust"
-        ],
-        emergingThemes: [
-          "The Creator Economy",
-          "The Metaverse",
-          "Longevity Tech",
-          "Sustainable Energy"
-        ]
+    const sectorQuery = selectedSector !== "All" ? `+${selectedSector.toLowerCase()}` : "";
+
+    const fetchTrends = async () => {
+      try {
+        const res = await fetch(
+          `https://newsapi.org/v2/top-headlines?category=business&country=us&q=${sectorQuery}&pageSize=10&apiKey=${apiKey}`
+        );
+        const data = await res.json();
+        setTrends(data.articles || []);
+      } catch (error) {
+        console.error("Error fetching trends:", error);
       }
     };
-  };
 
-  // Get first news item for trends section with proper image handling
-  const getTrendNews = () => {
-    if (!marketData?.news?.all?.length) return getFallbackData().news.all.slice(0, 2);
-    
-    const newsWithImages = marketData.news.all.filter(item => item.image);
-    
-    if (newsWithImages.length >= 2) {
-      return newsWithImages.slice(0, 2);
-    }
-    
-    // Fallback to any news items with placeholder images
-    return marketData.news.all.slice(0, 2).map((item, index) => ({
-      ...item,
-      image: item.image || getPlaceholderImage(index)
-    }));
-  };
-
-  // Get industry reports (categorized news)
-  const getIndustryReports = () => {
-    if (!marketData?.news?.categorized) return getFallbackData().news.categorized.technology.slice(0, 2);
-    
-    const reports = [];
-    Object.entries(marketData.news.categorized).forEach(([category, items]) => {
-      if (items.length > 0) {
-        const item = items[0];
-        reports.push({
-          category: formatCategory(category),
-          title: item.title,
-          content: item.content,
-          source: item.source,
-          image: item.image || getPlaceholderImage(reports.length),
-          published: item.published
-        });
+    const fetchReports = async () => {
+      try {
+        const res = await fetch(
+          `https://newsapi.org/v2/everything?q=industry+report+OR+market+analysis${sectorQuery}&sortBy=publishedAt&pageSize=10&apiKey=${apiKey}`
+        );
+        const data = await res.json();
+        setReports(data.articles || []);
+      } catch (error) {
+        console.error("Error fetching reports:", error);
       }
-    });
-    
-    return reports.slice(0, 2);
-  };
-
-  // Get deals and funds news
-  const getDealsNews = () => {
-    if (!marketData?.news?.all?.length) return [];
-    
-    const dealsNews = marketData.news.all.filter(item => 
-      item.title.toLowerCase().includes('fund') || 
-      item.title.toLowerCase().includes('series') ||
-      item.title.toLowerCase().includes('capital') ||
-      item.title.toLowerCase().includes('raise') ||
-      item.title.toLowerCase().includes('venture') ||
-      item.title.toLowerCase().includes('investment') ||
-      item.title.toLowerCase().includes('funding')
-    );
-    
-    return dealsNews.slice(0, 2).map((deal, index) => ({
-      ...deal,
-      image: deal.image || getPlaceholderImage(index)
-    }));
-  };
-
-  // Get placeholder images from Unsplash
-  const getPlaceholderImage = (index) => {
-    const images = [
-      "https://images.unsplash.com/photo-1559526324-5937fbd9ea81?w=600&h=400&fit=crop", // Business
-      "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&h=400&fit=crop", // Finance
-      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=400&fit=crop", // Office
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&h=400&fit=crop"  // Professional
-    ];
-    return images[index % images.length];
-  };
-
-  // Format category for display
-  const formatCategory = (category) => {
-    const categoryMap = {
-      ventureCapital: 'VC & Funding',
-      publicMarkets: 'Public Markets',
-      technology: 'Technology',
-      healthcare: 'Healthcare',
-      energy: 'Energy',
-      realEstate: 'Real Estate',
-      crypto: 'Cryptocurrency',
-      emergingMarkets: 'Emerging Markets',
-      incomeInvesting: 'Income Investing',
-      ipos: 'IPOs',
-      mergersAcquisitions: 'M&A',
-      generalInvesting: 'General Investing'
     };
-    
-    return categoryMap[category] || category;
-  };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen bg-gray-50">
-        <InvestorSidebar />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-lg">Loading market data...</div>
-        </div>
-      </div>
-    );
-  }
+    const fetchNewsItems = async () => {
+      try {
+        const res = await fetch(
+          `https://newsapi.org/v2/everything?q=startup+funding+OR+venture+capital+OR+series+funding${sectorQuery}&sortBy=publishedAt&pageSize=10&apiKey=${apiKey}`
+        );
+        const data = await res.json();
+        setNewsItems(data.articles || []);
+      } catch (error) {
+        console.error("Error fetching news items:", error);
+      }
+    };
+
+    fetchTrends();
+    fetchReports();
+    fetchNewsItems();
+  }, [selectedSector]);
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -234,17 +111,12 @@ export default function MarketResearchPage() {
               Market Research
             </h1>
             <p className="mt-2 text-gray-600">
-              Explore trends, reports, and news to inform your investment strategy.
+              Explore trends, reports, and news to inform your investment
+              strategy.
             </p>
           </div>
 
-          {error && (
-            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-yellow-800">{error}</p>
-            </div>
-          )}
-
-          {/* Search and Filter */}
+          {/* Search, Filter, and Sector Select */}
           <div className="mb-8 flex items-center gap-4">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -254,54 +126,86 @@ export default function MarketResearchPage() {
               <Filter className="h-4 w-4" />
               Filter
             </Button>
-            <Button onClick={fetchMarketData} variant="outline">
-              Refresh Data
-            </Button>
+            <Select value={selectedSector} onValueChange={setSelectedSector}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select sector" />
+              </SelectTrigger>
+              <SelectContent>
+                {sectors.map((sector) => (
+                  <SelectItem key={sector} value={sector}>
+                    {sector}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* New Trends Section */}
           <div className="mb-12">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-2xl font-bold text-gray-900">New Trends</h2>
-              <Button variant="link" className="text-emerald-600">
-                See All
+              <Button variant="link" className="text-emerald-600" onClick={() => setShowAllTrends(!showAllTrends)}>
+                {showAllTrends ? "Show Less" : "See All"}
               </Button>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-              {getTrendNews().map((news, index) => (
-                <Card key={index} className="overflow-hidden pt-0 hover:shadow-lg transition-shadow duration-300">
-                  <div className={`aspect-video bg-gradient-to-br ${
-                    index === 0 ? 'from-orange-200 to-orange-300' : 'from-emerald-500 to-emerald-600'
-                  }`}>
-                    <img
-                      src={news.image}
-                      alt={news.title}
-                      className="h-full w-full object-cover"
-                      onError={(e) => {
-                        // If image fails, replace with placeholder
-                        e.target.src = getPlaceholderImage(index);
-                      }}
-                    />
-                  </div>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {(showAllTrends ? trends : trends.slice(0, 2)).map((trend, index) => (
+                <Card key={index} className="overflow-hidden pt-0">
+                  <img
+                    src={trend.urlToImage || "/placeholder.svg"}
+                    alt={trend.title}
+                    className="aspect-video w-full object-cover"
+                  />
                   <CardContent className="p-6">
-                    <h3 className="text-xl font-semibold text-gray-900 line-clamp-2">
-                      {news.title}
+                    <h3 className="text-xl font-semibold text-gray-900">
+                      {trend.title}
                     </h3>
-                    <p className="mt-2 text-gray-600 line-clamp-2">
-                      {news.content || 'Latest market trends and insights...'}
+                    <p className="mt-2 text-gray-600">
+                      {trend.description}
                     </p>
-                    <div className="mt-3 flex items-center justify-between">
-                      <Badge variant="outline" className="text-xs">
-                        {news.source}
-                      </Badge>
-                      <span className="text-xs text-gray-500">
-                        {new Date(news.published).toLocaleDateString()}
-                      </span>
-                    </div>
                   </CardContent>
                 </Card>
               ))}
+              {trends.length === 0 && (
+                <>
+                  <Card className="overflow-hidden pt-0">
+                    <div className="aspect-video bg-gradient-to-br from-orange-200 to-orange-300">
+                      <img
+                        src="/professional-businesswoman.png"
+                        alt="AI-Driven Personalization"
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <CardContent className="p-6">
+                      <h3 className="text-xl font-semibold text-gray-900">
+                        AI-Driven Personalization in E-commerce
+                      </h3>
+                      <p className="mt-2 text-gray-600">
+                        How AI is transforming online shopping experiences.
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="overflow-hidden pt-0">
+                    <div className="aspect-video bg-gradient-to-br from-emerald-500 to-emerald-600">
+                      <img
+                        src="/sustainable-packaging-materials.jpg"
+                        alt="Sustainable Packaging"
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <CardContent className="p-6">
+                      <h3 className="text-xl font-semibold text-gray-900">
+                        Sustainable Packaging Solutions
+                      </h3>
+                      <p className="mt-2 text-gray-600">
+                        The rise of eco-friendly materials and practices.
+                      </p>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </div>
           </div>
 
@@ -311,47 +215,89 @@ export default function MarketResearchPage() {
               <h2 className="text-2xl font-bold text-gray-900">
                 AI-Fetched Industry Reports
               </h2>
-              <Button variant="link" className="text-emerald-600">
-                See All
+              <Button variant="link" className="text-emerald-600" onClick={() => setShowAllReports(!showAllReports)}>
+                {showAllReports ? "Show Less" : "See All"}
               </Button>
             </div>
 
             <div className="space-y-4">
-              {getIndustryReports().map((report, index) => (
-                <Card key={index} className="hover:shadow-md transition-shadow duration-300">
+              {(showAllReports ? reports : reports.slice(0, 2)).map((report, index) => (
+                <Card key={index}>
                   <CardContent className="flex gap-6 p-6">
-                    <div className="flex h-24 w-20 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 overflow-hidden">
+                    <div className="flex h-24 w-20 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100">
                       <img
-                        src={report.image}
-                        alt={report.category}
-                        className="h-full w-full object-cover"
-                        onError={(e) => {
-                          e.target.src = getPlaceholderImage(index);
-                        }}
+                        src={report.urlToImage || "/document-preview.png"}
+                        alt={report.title}
+                        className="h-full w-full object-cover rounded-lg"
                       />
                     </div>
                     <div className="flex-1">
                       <Badge variant="secondary" className="mb-2">
-                        {report.category}
+                        {report.source.name || "Report"}
                       </Badge>
-                      <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">
+                      <h3 className="text-lg font-semibold text-gray-900">
                         {report.title}
                       </h3>
-                      <p className="mt-2 text-sm text-gray-600 line-clamp-3">
-                        {report.content || `Analysis of the ${report.category} market, including key players, investment trends, and future projections.`}
+                      <p className="mt-2 text-sm text-gray-600">
+                        {report.description}
                       </p>
-                      <div className="mt-3 flex items-center justify-between">
-                        <span className="text-xs text-gray-500">
-                          {report.source}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {new Date(report.published).toLocaleDateString()}
-                        </span>
-                      </div>
                     </div>
                   </CardContent>
                 </Card>
               ))}
+              {reports.length === 0 && (
+                <>
+                  <Card>
+                    <CardContent className="flex gap-6 p-6">
+                      <div className="flex h-24 w-20 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100">
+                        <img
+                          src="/document-preview.png"
+                          alt="Report"
+                          className="h-full w-full object-cover rounded-lg"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <Badge variant="secondary" className="mb-2">
+                          EdTech
+                        </Badge>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          The Future of EdTech: Trends and Opportunities
+                        </h3>
+                        <p className="mt-2 text-sm text-gray-600">
+                          Analysis of the evolving educational technology market,
+                          including key players, investment trends, and future
+                          projections.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="flex gap-6 p-6">
+                      <div className="flex h-24 w-20 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100">
+                        <img
+                          src="/healthcare-document.jpg"
+                          alt="Report"
+                          className="h-full w-full object-cover rounded-lg"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <Badge variant="secondary" className="mb-2">
+                          Healthcare
+                        </Badge>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          Healthcare Innovation: Digital Health and Telemedicine
+                        </h3>
+                        <p className="mt-2 text-sm text-gray-600">
+                          An in-depth look at the digital transformation of
+                          healthcare, focusing on telemedicine and data-driven
+                          solutions.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </div>
           </div>
         </main>
@@ -364,44 +310,82 @@ export default function MarketResearchPage() {
         </h2>
 
         <div className="space-y-6">
-          {getDealsNews().map((deal, index) => (
-            <div key={index} className="flex gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200">
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-600 overflow-hidden">
-                {deal.image ? (
-                  <img
-                    src={deal.image}
-                    alt={deal.source}
-                    className="h-full w-full object-cover"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                ) : null}
-                <div className="flex items-center justify-center h-full w-full">
-                  <span className="text-sm font-semibold text-white">
-                    {deal.source?.substring(0, 2).toUpperCase() || 'NF'}
-                  </span>
+          {(showAllNews ? newsItems : newsItems.slice(0, 2)).map((item, index) => {
+            const lowerTitle = item.title.toLowerCase();
+            const badgeText = lowerTitle.includes("fund") || lowerTitle.includes("launch")
+              ? "Fund News"
+              : "Deal News";
+            const isFund = badgeText === "Fund News";
+            const bgClass = isFund ? "bg-emerald-700" : "bg-emerald-600";
+            const icon = isFund ? (
+              <Sparkles className="h-6 w-6 text-white" />
+            ) : (
+              <span className="text-sm font-semibold text-white">
+                {item.source.name?.[0] || "D"}
+              </span>
+            );
+
+            return (
+              <div key={index} className="flex gap-4">
+                <div
+                  className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg ${bgClass}`}
+                >
+                  {icon}
+                </div>
+                <div>
+                  <Badge variant="secondary" className="mb-1 text-xs">
+                    {badgeText}
+                  </Badge>
+                  <h3 className="font-semibold text-gray-900">
+                    {item.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-600">
+                    {item.description}
+                  </p>
                 </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <Badge variant="secondary" className="mb-1 text-xs">
-                  {deal.title.toLowerCase().includes('fund') ? 'Fund News' : 'Deal News'}
-                </Badge>
-                <h3 className="font-semibold text-gray-900 line-clamp-2 text-sm">
-                  {deal.title}
-                </h3>
-                <p className="mt-1 text-sm text-gray-600 line-clamp-2">
-                  {deal.content || 'Latest funding and investment news...'}
-                </p>
-                <span className="text-xs text-gray-500 mt-1 block">
-                  {new Date(deal.published).toLocaleDateString()}
-                </span>
+            );
+          })}
+          {newsItems.length === 0 && (
+            <>
+              <div className="flex gap-4">
+                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-600">
+                  <span className="text-sm font-semibold text-white">CT</span>
+                </div>
+                <div>
+                  <Badge variant="secondary" className="mb-1 text-xs">
+                    Deal News
+                  </Badge>
+                  <h3 className="font-semibold text-gray-900">
+                    Series B for 'CogniTech'
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-600">
+                    CogniTech secures $20M to expand its AI analytics platform.
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
 
-          <Button className="w-full bg-emerald-600 hover:bg-emerald-700">
-            View All News
+              <div className="flex gap-4">
+                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-700">
+                  <Sparkles className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <Badge variant="secondary" className="mb-1 text-xs">
+                    Fund News
+                  </Badge>
+                  <h3 className="font-semibold text-gray-900">
+                    'Innovate Capital' Launches
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-600">
+                    New $50M fund for early-stage sustainable tech startups.
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
+          <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={() => setShowAllNews(!showAllNews)}>
+            {showAllNews ? "Show Less" : "View All News"}
           </Button>
         </div>
 
@@ -410,51 +394,29 @@ export default function MarketResearchPage() {
             Emerging Themes
           </h3>
           <div className="space-y-3">
-            {(marketData?.analysis?.emergingThemes || [
-              "The Creator Economy",
-              "The Metaverse", 
-              "Longevity Tech",
-              "Sustainable Energy",
-              "AI Revolution"
-            ]).slice(0, 3).map((theme, index) => (
-              <Button key={index} variant="ghost" className="w-full justify-between hover:bg-gray-50">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-emerald-600" />
-                  <span className="line-clamp-1 text-sm">{theme}</span>
-                </div>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            ))}
+            <Button variant="ghost" className="w-full justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-emerald-600" />
+                <span>The Creator Economy</span>
+              </div>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" className="w-full justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-emerald-600" />
+                <span>The Metaverse</span>
+              </div>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" className="w-full justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-emerald-600" />
+                <span>Longevity Tech</span>
+              </div>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
           </div>
         </div>
-
-        {/* Market Sentiment */}
-        {marketData?.analysis && (
-          <div className="mt-8 p-4 bg-gray-50 rounded-lg border">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
-              Market Sentiment
-            </h3>
-            <div className="flex items-center gap-2 mb-3">
-              <div className={`w-3 h-3 rounded-full ${
-                marketData.analysis.marketSentiment === 'Bullish' ? 'bg-green-500' :
-                marketData.analysis.marketSentiment === 'Bearish' ? 'bg-red-500' : 'bg-yellow-500'
-              }`} />
-              <span className="font-semibold capitalize">
-                {marketData.analysis.marketSentiment}
-              </span>
-            </div>
-            {marketData.analysis.keyTrends && (
-              <div className="text-sm text-gray-600">
-                <span className="font-medium">Key Trends:</span>
-                <ul className="mt-1 space-y-1">
-                  {marketData.analysis.keyTrends.slice(0, 2).map((trend, index) => (
-                    <li key={index} className="line-clamp-1 text-xs">• {trend}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import { authOptions } from "../auth/[...nextauth]/route";
 
 // ------------------ Utils ------------------
 
-function decodeBase64(base64String: string) {
+function decodeBase64(base64String) {
   if (!base64String) return "";
   const buff = Buffer.from(
     base64String.replace(/-/g, "+").replace(/_/g, "/"),
@@ -12,16 +12,16 @@ function decodeBase64(base64String: string) {
   return buff.toString("utf-8");
 }
 
-function extractBody(payload: any): string {
+function extractBody(payload) {
   if (!payload) return "";
   if (payload.body?.data) return decodeBase64(payload.body.data);
 
   if (payload.parts?.length) {
-    const htmlPart = payload.parts.find((p: any) => p.mimeType === "text/html");
+    const htmlPart = payload.parts.find((p) => p.mimeType === "text/html");
     if (htmlPart?.body?.data) return decodeBase64(htmlPart.body.data);
 
     const textPart = payload.parts.find(
-      (p: any) => p.mimeType === "text/plain"
+      (p) => p.mimeType === "text/plain"
     );
     if (textPart?.body?.data) return decodeBase64(textPart.body.data);
 
@@ -33,9 +33,36 @@ function extractBody(payload: any): string {
   return "";
 }
 
+// Function to extract attachments
+function extractAttachments(payload, messageId) {
+  const attachments = [];
+  
+  function processPart(part, path = '') {
+    if (part.filename && part.filename.length > 0 && part.body?.attachmentId) {
+      attachments.push({
+        id: part.body.attachmentId,
+        filename: part.filename,
+        mimeType: part.mimeType,
+        size: part.body.size || 'Unknown size',
+        url: `/api/gmail/attachments/${messageId}/${part.body.attachmentId}`
+      });
+    }
+    
+    if (part.parts) {
+      part.parts.forEach((p, index) => processPart(p, `${path}.parts[${index}]`));
+    }
+  }
+  
+  if (payload.parts) {
+    payload.parts.forEach((part, index) => processPart(part, `parts[${index}]`));
+  }
+  
+  return attachments;
+}
+
 // ------------------ Sector Detection ------------------
 
-const sectorKeywords: Record<string, string[]> = {
+const sectorKeywords = {
   Fintech: [
     "fintech",
     "bank",
@@ -76,27 +103,9 @@ const sectorKeywords: Record<string, string[]> = {
   Startup: ["startup", "founder", "pitch", "seed", "bootstrap"],
 };
 
-function detectSector(from: string, subject: string, body: string): string {
-  // const text = (from + " " + subject + " " + body).toLowerCase()
-  // const scores: Record<string, number> = {}
-
-  // for (const [sector, keywords] of Object.entries(sectorKeywords)) {
-  //   scores[sector] = keywords.reduce(
-  //     (count, word) => count + (text.includes(word) ? 1 : 0),
-  //     0
-  //   )
-  // }
-
-  // // Pick the sector with the highest keyword match
-  // const [bestSector, bestScore] = Object.entries(scores).reduce(
-  //   (a, b) => (b[1] > a[1] ? b : a),
-  //   ["General", 0]
-  // )
-
-  // return bestScore > 0 ? bestSector : "General"
+function detectSector(from, subject, body) {
   const text = (from + subject + body).toLowerCase();
 
-  // Prioritize Fintech & AI before general Startup keywords
   for (const [sector, keywords] of Object.entries(sectorKeywords)) {
     if (keywords.some((keyword) => text.includes(keyword))) {
       return sector;
@@ -106,7 +115,7 @@ function detectSector(from: string, subject: string, body: string): string {
   return "General";
 }
 
-function defaultStatus(sector: string) {
+function defaultStatus(sector) {
   if (sector === "Investor") return "Under Evaluation";
   if (sector === "Fintech") return "New";
   if (sector === "Startup") return "Contacted";
@@ -115,10 +124,7 @@ function defaultStatus(sector: string) {
 
 // ------------------ Relevance Scoring ------------------
 
-function computeRelevance(
-  email: { subject: string; content: string; sector: string },
-  thesis: any
-): number {
+function computeRelevance(email, thesis) {
   const text = (email.subject + " " + email.content).toLowerCase();
   let score = 0;
   let maxScore = 0;
@@ -126,7 +132,7 @@ function computeRelevance(
   // 🎯 Sector match
   maxScore += 30;
   if (
-    thesis.sectors?.some((s: string) =>
+    thesis.sectors?.some((s) =>
       email.sector.toLowerCase().includes(s.toLowerCase())
     )
   ) {
@@ -136,7 +142,7 @@ function computeRelevance(
   // 🔑 Keyword match
   maxScore += 40;
   if (thesis.keywords?.length) {
-    const keywordMatches = thesis.keywords.filter((kw: string) =>
+    const keywordMatches = thesis.keywords.filter((kw) =>
       text.includes(kw.toLowerCase())
     ).length;
     score += Math.min(40, (keywordMatches / thesis.keywords.length) * 40);
@@ -144,7 +150,7 @@ function computeRelevance(
 
   // 🚫 Excluded keyword penalty
   if (thesis.excludedKeywords?.length) {
-    const excludedMatches = thesis.excludedKeywords.filter((kw: string) =>
+    const excludedMatches = thesis.excludedKeywords.filter((kw) =>
       text.includes(kw.toLowerCase())
     ).length;
     score -= excludedMatches * 15;
@@ -153,7 +159,7 @@ function computeRelevance(
   // 🌍 Geography match
   maxScore += 20;
   if (thesis.geographies?.length) {
-    const geoMatches = thesis.geographies.filter((g: string) =>
+    const geoMatches = thesis.geographies.filter((g) =>
       text.includes(g.toLowerCase())
     ).length;
     score += Math.min(20, (geoMatches / thesis.geographies.length) * 20);
@@ -223,7 +229,7 @@ export async function GET() {
 
     // 🔹 Step 3: Process each email
     const emails = await Promise.all(
-      listData.messages.map(async (msg: any) => {
+      listData.messages.map(async (msg) => {
         const detailRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
           { headers: { Authorization: `Bearer ${session.accessToken}` } }
@@ -234,13 +240,16 @@ export async function GET() {
 
         const headers = detail.payload?.headers || [];
         const subject =
-          headers.find((h: any) => h.name === "Subject")?.value ||
+          headers.find((h) => h.name === "Subject")?.value ||
           "(no subject)";
         const fromHeader =
-          headers.find((h: any) => h.name === "From")?.value ||
+          headers.find((h) => h.name === "From")?.value ||
           "(unknown sender)";
-        const date = headers.find((h: any) => h.name === "Date")?.value || "";
+        const date = headers.find((h) => h.name === "Date")?.value || "";
         const body = extractBody(detail.payload);
+        
+        // Extract attachments
+        const attachments = extractAttachments(detail.payload, msg.id);
 
         let from = fromHeader;
         let fromEmail = fromHeader;
@@ -268,6 +277,9 @@ export async function GET() {
           relevanceScore,
           timestamp: new Date(date).toISOString(),
           content: body,
+          attachments,
+          isRead: detail.labelIds?.includes('UNREAD') ? false : true,
+          isStarred: detail.labelIds?.includes('STARRED') || false,
         };
       })
     );
@@ -278,7 +290,7 @@ export async function GET() {
       .sort((a, b) => b.relevanceScore - a.relevanceScore);
 
     return new Response(JSON.stringify(filtered), { status: 200 });
-  } catch (err: any) {
+  } catch (err) {
     console.error("🔥 Gmail API error:", err);
     return new Response(
       JSON.stringify({ error: err.message || "Internal server error" }),
