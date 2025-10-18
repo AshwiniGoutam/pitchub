@@ -264,11 +264,11 @@ export default function InboxPage() {
                         <td className="whitespace-nowrap px-6 py-4">
                           <div className="flex items-center gap-3">
                             <Progress
-                              value={email.startup?.relevanceScore || 0}
+                              value={email.startup?.relevanceScore || 80}
                               className="h-2 w-24"
                             />
                             <span className="text-sm font-medium">
-                              {email.startup?.relevanceScore || 0}%
+                              {email.startup?.relevanceScore || 80}%
                             </span>
                           </div>
                         </td>
