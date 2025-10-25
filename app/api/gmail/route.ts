@@ -206,7 +206,7 @@ export async function GET() {
 
     // 🔹 Step 2: Fetch Gmail messages (last 3 months)
     const query =
-      "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
+      "newer_than:30d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
     const listRes = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
         query

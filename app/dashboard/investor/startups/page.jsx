@@ -12,11 +12,19 @@ import {
 } from "@/components/ui/dialog";
 import { Download, Mail } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import ConnectionFilterDropdown from "@/components/ui/ConnectionFilterDropdown";
 
 export default function Page() {
   const [startups, setStartups] = useState([]);
   const [selectedStartup, setSelectedStartup] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailContent, setEmailContent] = useState({
+    to: "",
+    subject: "",
+    body: "",
+  });
+  const [Loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchStartups();
@@ -40,6 +48,49 @@ export default function Page() {
     });
   };
 
+  const sendEmail = async () => {
+    // console.log(selectedStartup);
+    // return
+
+    try {
+      setLoading(true);
+
+      const res = await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...emailContent,
+          startupId: selectedStartup?._id, // 👈 include startup id
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        // ✅ Update local state so UI shows "Contacted" immediately
+        setStartups((prev) =>
+          prev.map((s) =>
+            s._id === selectedStartup?._id ? { ...s, status: "contacted" } : s
+          )
+        );
+
+        setLoading(false);
+        setIsEmailModalOpen(false);
+        console.log(
+          "✅ Email sent & status updated for:",
+          selectedStartup?.name
+        );
+      } else {
+        alert("Error sending email: " + data.message);
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error sending email");
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
       <InvestorSidebar />
@@ -59,7 +110,31 @@ export default function Page() {
           </div>
         </header>
         <div className="p-8 max-w-7xl mx-auto">
-          <div className="p-8">
+          <div className="flex items-center justify-between">
+            {/* Tabs */}
+            <div className="flex space-x-8 text-gray-600 font-medium">
+              {["Deals", "Pitch Connect", "Archived"].map((tab, i) => (
+                <button
+                  key={i}
+                  className={`pb-2 border-b-2 transition ${
+                    tab === "Pitch Connect"
+                      ? "text-emerald-600 border-emerald-600"
+                      : "border-transparent hover:text-emerald-600"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            {/* Filter Dropdown */}
+            <ConnectionFilterDropdown
+              onChange={(value) => {
+                console.log("Selected connection type:", value);
+              }}
+            />
+          </div>
+          <div className="py-8">
             <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm bg-white">
               <table className="w-full border-collapse">
                 <thead className="bg-emerald-50/60 text-gray-600 text-sm">
@@ -123,9 +198,9 @@ export default function Page() {
                             Submitted
                           </Badge>
                         )}
-                        {startup.status === "approved" && (
+                        {startup.status === "contacted" && (
                           <Badge className="bg-emerald-100 text-emerald-700">
-                            Approved
+                            Contacted
                           </Badge>
                         )}
                         {startup.status === "under_review" && (
@@ -140,16 +215,33 @@ export default function Page() {
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <Button
+                        {/* <Button
                           variant="default"
-                          className="mr-2 text-xs bg-white hover:bg-emerald-700 text-dark border border-[#ccc] font-medium"
+                          className="mr-2 text-xs bg-white hover:bg-emerald-600 text-dark hover:text-white border border-[#ccc] font-medium"
                           onClick={() => {
                             setSelectedStartup(startup);
                             setIsModalOpen(true);
                           }}
                         >
                           Mail Founder
+                        </Button> */}
+                        <Button
+                          variant="default"
+                          className="mr-2 text-xs bg-white hover:bg-emerald-600 text-dark hover:text-white border border-[#ccc] font-medium"
+                          onClick={() => {
+                            setEmailContent({
+                              to: startup.founderId,
+                              subject: `Regarding Investment Opportunity in ${startup.name}`,
+                              body: `Hi ${startup.name} Founder,\n\nI came across your startup and I'm interested in discussing potential investment opportunities.\n\nBest regards,\n[Your Name]`,
+                            });
+                            setIsEmailModalOpen(true),
+                              setSelectedStartup(startup);
+                          }}
+                          disabled={startup.status === "contacted"}
+                        >
+                          {startup.status === "contacted" ? "Mail Sended" : "Mail Founder"}
                         </Button>
+
                         <Button
                           variant="default"
                           className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
@@ -291,6 +383,66 @@ export default function Page() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEmailModalOpen} onOpenChange={setIsEmailModalOpen}>
+        <DialogContent className="max-w-lg w-full p-6 bg-white rounded shadow-xl">
+          <DialogHeader>
+            <DialogTitle>Send Email</DialogTitle>
+            <DialogDescription>
+              Preview your email before sending.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 mt-4">
+            <div>
+              <label className="font-medium text-sm">To:</label>
+              <input
+                type="email"
+                value={emailContent.to}
+                readOnly
+                className="w-full border px-2 py-1 rounded"
+              />
+            </div>
+
+            <div>
+              <label className="font-medium text-sm">Subject:</label>
+              <input
+                type="text"
+                value={emailContent.subject}
+                onChange={(e) =>
+                  setEmailContent({ ...emailContent, subject: e.target.value })
+                }
+                className="w-full border px-2 py-1 rounded"
+              />
+            </div>
+
+            <div>
+              <label className="font-medium text-sm">Body:</label>
+              <textarea
+                rows={6}
+                value={emailContent.body}
+                onChange={(e) =>
+                  setEmailContent({ ...emailContent, body: e.target.value })
+                }
+                className="w-full border px-2 py-1 rounded"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => setIsEmailModalOpen(false)}
+                disabled={Loading}
+              >
+                Cancel
+              </Button>
+              <Button onClick={sendEmail}>
+                {Loading ? "Sending Email..." : "Send Email"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
