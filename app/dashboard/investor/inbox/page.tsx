@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Bell, X, Download, TrendingUp, BarChart3, FileText } from "lucide-react";
+import { Bell, X, Download, TrendingUp, BarChart3, FileText, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,12 @@ interface EmailAnalysis {
   growthStage: "Early" | "Expansion" | "Mature";
 }
 
+interface SectorResult {
+  emailId: string;
+  sector: string;
+  method: 'keywords' | 'gemini' | 'error';
+}
+
 export default function InboxPage() {
   const router = useRouter();
 
@@ -59,8 +65,12 @@ export default function InboxPage() {
   const [processingEmails, setProcessingEmails] = useState(true);
   const [progress, setProgress] = useState(0);
   const [attachmentModalOpen, setAttachmentModalOpen] = useState(false);
+  const [predictionStats, setPredictionStats] = useState({ total: 0, gemini: 0, keywords: 0 });
 
+  const [emailSectors, setEmailSectors] = useState<Record<string, string>>({});
+  const [predictionMethods, setPredictionMethods] = useState<Record<string, string>>({});
   const [emailAnalyses, setEmailAnalyses] = useState<Record<string, EmailAnalysis>>({});
+  const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     async function fetchAndProcessEmails() {
@@ -76,8 +86,8 @@ export default function InboxPage() {
           setSelectedEmail(emailsData[0]);
         }
 
-        // Process ALL emails for accurate sectors
-        await processAllEmails(emailsData);
+        // QUICK: Only predict sectors initially for all emails
+        await predictSectorsOnly(emailsData);
       } catch (err) {
         console.error("Error fetching emails:", err);
       } finally {
@@ -87,8 +97,8 @@ export default function InboxPage() {
     fetchAndProcessEmails();
   }, []);
 
-  // Process all emails with full analysis
-  const processAllEmails = async (emails: Email[]) => {
+  // Quick sector prediction only with hybrid approach
+  const predictSectorsOnly = async (emails: Email[]) => {
     if (emails.length === 0) {
       setProcessingEmails(false);
       return;
@@ -98,41 +108,101 @@ export default function InboxPage() {
     setProgress(0);
 
     try {
-      const res = await fetch("/api/process-all-emails", {
+      const res = await fetch("/api/predict-sectors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emails }),
       });
 
-      if (!res.ok) throw new Error("Failed to process emails");
+      if (!res.ok) throw new Error("Failed to predict sectors");
 
       const data = await res.json();
-      
-      // Store all analyses
-      const analyses: Record<string, EmailAnalysis> = {};
-      data.analyses.forEach((item: { emailId: string; analysis: EmailAnalysis }) => {
-        analyses[item.emailId] = item.analysis;
-        // Update progress
-        setProgress(Math.round(((Object.keys(analyses).length) / emails.length) * 100));
+
+      // Store sectors and methods
+      const sectors: Record<string, string> = {};
+      const methods: Record<string, string> = {};
+
+      data.sectors.forEach((item: SectorResult) => {
+        sectors[item.emailId] = item.sector;
+        methods[item.emailId] = item.method;
+        setProgress(Math.round(((Object.keys(sectors).length) / emails.length) * 100));
       });
-      
-      setEmailAnalyses(analyses);
+
+      setEmailSectors(sectors);
+      setPredictionMethods(methods);
+
+      // Update stats
+      if (data.stats) {
+        setPredictionStats({
+          total: data.stats.totalEmails,
+          gemini: data.stats.geminiRequests,
+          keywords: data.stats.keywordMatches
+        });
+      }
     } catch (err) {
-      console.error("Error processing emails:", err);
+      console.error("Error predicting sectors:", err);
     } finally {
       setProcessingEmails(false);
       setProgress(100);
     }
   };
 
+  // Load full analysis when email is selected
+  const loadFullAnalysis = async (emailId: string) => {
+    // If we already have the analysis, don't load again
+    if (emailAnalyses[emailId]) return;
+
+    setLoadingDetails(prev => ({ ...prev, [emailId]: true }));
+
+    try {
+      const email = emails.find(e => e.id === emailId);
+      if (!email) return;
+
+      const res = await fetch("/api/process-all-emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: [email] }), // Only process the selected email
+      });
+
+      if (!res.ok) throw new Error("Failed to load email analysis");
+
+      const data = await res.json();
+
+      if (data.analyses && data.analyses.length > 0) {
+        setEmailAnalyses(prev => ({
+          ...prev,
+          [emailId]: data.analyses[0].analysis
+        }));
+      }
+    } catch (err) {
+      console.error("Error loading full analysis:", err);
+    } finally {
+      setLoadingDetails(prev => ({ ...prev, [emailId]: false }));
+    }
+  };
+
+  // Single click - select email for preview and load full analysis
+  const handleEmailSelect = async (email: Email) => {
+    setSelectedEmail(email);
+
+    // Load full analysis when email is selected
+    if (!emailAnalyses[email.id]) {
+      await loadFullAnalysis(email.id);
+    }
+  };
+
+  // Double click - navigate to deal detail page
+  const handleEmailDoubleClick = (email: Email) => {
+    router.push(`/dashboard/investor/deals/${email.id}`);
+  };
+
   // Function to download attachments
   const downloadAttachment = async (attachment: any, emailSubject: string) => {
     try {
-      // Your existing download logic here
       if (attachment.url) {
         const res = await fetch(attachment.url);
         if (!res.ok) throw new Error('Failed to download attachment');
-        
+
         const blob = await res.blob();
         const downloadUrl = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -145,7 +215,8 @@ export default function InboxPage() {
         return;
       }
 
-      // Your existing fallback logic...
+      // Fallback logic if needed
+      console.warn('No attachment URL found');
     } catch (error) {
       console.error('Error downloading attachment:', error);
       alert('Failed to download attachment. Please try again.');
@@ -169,6 +240,19 @@ export default function InboxPage() {
     }
   };
 
+  // Function to get prediction method badge
+  // Function to get prediction method badge
+  const getMethodBadge = (method: string) => {
+    if (method === 'keywords') {
+      return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">Fast</Badge>;
+    } else if (method === 'gemini') {
+      return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">AI</Badge>;
+    } else if (method === 'fallback' || method === 'error_fallback') {
+      return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">Basic</Badge>;
+    }
+    return null;
+  };
+
   const filteredEmails = emails.filter((email) => {
     const matchesSearch =
       email.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -183,16 +267,6 @@ export default function InboxPage() {
 
     return matchesSearch && matchesFilter;
   });
-
-  // Single click - select email for preview
-  const handleEmailSelect = (email: Email) => {
-    setSelectedEmail(email);
-  };
-
-  // Double click - navigate to deal detail page
-  const handleEmailDoubleClick = (email: Email) => {
-    router.push(`/dashboard/investor/deals/${email.id}`);
-  };
 
   if (loading) {
     return (
@@ -213,7 +287,7 @@ export default function InboxPage() {
       <InvestorSidebar />
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Inbox List - Keeping your existing structure */}
+        {/* Inbox List */}
         <div className={`${selectedEmail ? "w-2/3" : "w-full"} overflow-auto border-r bg-white transition-all`}>
           {/* Header */}
           <header className="sticky top-0 z-10 border-b bg-white">
@@ -221,9 +295,13 @@ export default function InboxPage() {
               <div>
                 <h1 className="text-2xl font-bold">Inbox</h1>
                 <p className="text-sm text-gray-600">
-                  An overview of your deal flow activity.
-                  {processingEmails && (
-                    <span className="ml-2 text-blue-600">Analyzing sectors... {progress}%</span>
+                  {processingEmails ? (
+                    <span className="text-blue-600">Analyzing sectors... {progress}%</span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-green-600" />
+                      Ready! {predictionStats.keywords}/{predictionStats.total} predicted instantly
+                    </span>
                   )}
                 </p>
               </div>
@@ -246,51 +324,49 @@ export default function InboxPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {filteredEmails.map((email) => {
-                    const analysis = emailAnalyses[email.id];
-                    const hasAnalysis = !!analysis;
-                    
-                    return (
-                      <tr
-                        key={email.id}
-                        onClick={() => handleEmailSelect(email)}
-                        onDoubleClick={() => handleEmailDoubleClick(email)}
-                        className={`cursor-pointer transition-colors hover:bg-gray-50 ${
-                          selectedEmail?.id === email.id ? "bg-emerald-50" : ""
+                  {filteredEmails.map((email) => (
+                    <tr
+                      key={email.id}
+                      onClick={() => handleEmailSelect(email)}
+                      onDoubleClick={() => handleEmailDoubleClick(email)}
+                      className={`cursor-pointer transition-colors hover:bg-gray-50 ${selectedEmail?.id === email.id ? "bg-emerald-50" : ""
                         }`}
-                      >
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{email.from}</td>
-                        <td className="px-6 py-4 text-sm text-gray-500">
-                          {processingEmails && !hasAnalysis ? (
+                    >
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{email.from}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        <div className="flex items-center gap-2">
+                          {processingEmails && !emailSectors[email.id] ? (
                             <div className="flex items-center gap-2">
                               <div className="animate-spin rounded-full h-3 w-3 border border-blue-500 border-t-transparent"></div>
                               <span className="text-gray-400">Analyzing...</span>
                             </div>
-                          ) : hasAnalysis ? (
-                            analysis.sector
+                          ) : emailSectors[email.id] ? (
+                            <>
+                              {emailSectors[email.id]}
+                              {getMethodBadge(predictionMethods[email.id])}
+                            </>
                           ) : (
                             <span className="text-gray-400">Unknown</span>
                           )}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <Progress value={email.startup?.relevanceScore || 0} className="h-2 w-24" />
-                            <span className="text-sm font-medium">{email.startup?.relevanceScore || 0}%</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <Badge className={`${
-                            email?.status == "Contacted" ? "bg-blue-100 text-blue-700" :
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Progress value={email.startup?.relevanceScore || 0} className="h-2 w-24" />
+                          <span className="text-sm font-medium">{email.startup?.relevanceScore || 0}%</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Badge className={`${email?.status == "Contacted" ? "bg-blue-100 text-blue-700" :
                             email?.status == "Under Evaluation" ? "bg-yellow-100 text-yellow-700" :
-                            email?.status == "Pending" ? "bg-red-100 text-red-700" :
-                            email?.status == "New" ? "bg-emerald-100 text-emerald-700" : ""
+                              email?.status == "Pending" ? "bg-red-100 text-red-700" :
+                                email?.status == "New" ? "bg-emerald-100 text-emerald-700" : ""
                           }`}>
-                            {email.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          {email.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -318,8 +394,8 @@ export default function InboxPage() {
                     <TabsTrigger value="pitch-deck">Pitch Deck</TabsTrigger>
                     <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
                   </TabsList>
-                  
-                  {/* Pitch Deck Tab - ONLY: Pitch Deck Preview + Executive Summary */}
+
+                  {/* Pitch Deck Tab */}
                   <TabsContent value="pitch-deck" className="space-y-6">
                     {/* Pitch Deck Preview */}
                     <Card>
@@ -360,7 +436,7 @@ export default function InboxPage() {
 
                     {/* Download Attachments Button */}
                     {selectedEmail.attachments && selectedEmail.attachments.length > 0 && (
-                      <Button 
+                      <Button
                         onClick={() => setAttachmentModalOpen(true)}
                         className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
                       >
@@ -370,9 +446,9 @@ export default function InboxPage() {
                     )}
                   </TabsContent>
 
-                  {/* AI Insights Tab - ONLY: Competitive Analysis and Market Research (Short) */}
+                  {/* AI Insights Tab */}
                   <TabsContent value="ai-insights" className="space-y-6">
-                    {/* Competitive Analysis - Short */}
+                    {/* Competitive Analysis */}
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg">
@@ -384,13 +460,12 @@ export default function InboxPage() {
                         <div className="space-y-3">
                           {emailAnalyses[selectedEmail.id].competitiveAnalysis.slice(0, 3).map((point, index) => (
                             <div key={index} className="flex items-start gap-2">
-                              <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-                                point.toLowerCase().includes('advantage') || point.toLowerCase().includes('strength') 
-                                  ? 'bg-green-500' 
+                              <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${point.toLowerCase().includes('advantage') || point.toLowerCase().includes('strength')
+                                  ? 'bg-green-500'
                                   : point.toLowerCase().includes('weakness') || point.toLowerCase().includes('challenge')
-                                  ? 'bg-red-500'
-                                  : 'bg-blue-500'
-                              }`} />
+                                    ? 'bg-red-500'
+                                    : 'bg-blue-500'
+                                }`} />
                               <span className="text-sm text-gray-700">{point}</span>
                             </div>
                           ))}
@@ -398,7 +473,7 @@ export default function InboxPage() {
                       </CardContent>
                     </Card>
 
-                    {/* Market Research - Short */}
+                    {/* Market Research */}
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg">
@@ -418,25 +493,41 @@ export default function InboxPage() {
             ) : (
               <div className="flex flex-col items-center justify-center h-full py-12">
                 <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">Analyzing Email</h3>
-                  <p className="text-gray-600 text-center max-w-sm">
-                    This email is still being processed. Please wait while we generate comprehensive AI insights.
-                  </p>
-                  <div className="mt-6 w-full max-w-xs">
-                    <div className="flex justify-between text-sm text-gray-500 mb-1">
-                      <span>Processing...</span>
-                      <span>{progress}%</span>
-                    </div>
-                    <Progress value={progress} className="h-2" />
-                  </div>
+                  {loadingDetails[selectedEmail.id] ? (
+                    <>
+                      <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">Loading Full Analysis</h3>
+                      <p className="text-gray-600 text-center max-w-sm">
+                        Loading detailed AI insights for this email...
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">Quick Preview</h3>
+                      <p className="text-gray-600 text-center max-w-sm mb-4">
+                        Sector: <strong>{emailSectors[selectedEmail.id] || "Unknown"}</strong>
+                        {predictionMethods[selectedEmail.id] === 'keywords' && (
+                          <Badge className="ml-2 bg-green-100 text-green-700">Fast Prediction</Badge>
+                        )}
+                      </p>
+                      <p className="text-sm text-gray-500 mb-6">
+                        Click the button below to load comprehensive AI analysis including competitive analysis, market research, and executive summary.
+                      </p>
+                      <Button
+                        onClick={() => loadFullAnalysis(selectedEmail.id)}
+                        className="bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        Load Full AI Analysis
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Attachments Modal - Keeping your existing modal */}
+        {/* Attachments Modal */}
         <Dialog open={attachmentModalOpen} onOpenChange={setAttachmentModalOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -444,7 +535,7 @@ export default function InboxPage() {
                 Download Attachments
               </DialogTitle>
             </DialogHeader>
-            
+
             {selectedEmail?.attachments && selectedEmail.attachments.length > 0 ? (
               <>
                 <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -479,7 +570,7 @@ export default function InboxPage() {
                 <div className="flex gap-2 pt-4">
                   <Button
                     onClick={() => {
-                      selectedEmail.attachments.forEach(attachment => 
+                      selectedEmail.attachments.forEach(attachment =>
                         downloadAttachment(attachment, selectedEmail.subject)
                       );
                     }}

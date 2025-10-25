@@ -30,3 +30,8 @@ model InvestorProfile {
   keywords         String[]
   excludedKeywords String[]
 }
+
+
+
+
+
