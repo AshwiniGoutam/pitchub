@@ -788,7 +788,7 @@ export default function InboxPage() {
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-3">
-                          {emailAnalyses[selectedEmail.id].competitiveAnalysis.slice(0, 3).map((point, index) => (
+                          {emailAnalyses[selectedEmail.id]?.competitiveAnalysis?.slice(0, 3).map((point, index) => (
                             <div key={index} className="flex items-start gap-2">
                               <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${point.toLowerCase().includes('advantage') || point.toLowerCase().includes('strength')
                                   ? 'bg-green-500'
