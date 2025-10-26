@@ -239,7 +239,7 @@ export default function Page() {
                           }}
                           disabled={startup.status === "contacted"}
                         >
-                          {startup.status === "contacted" ? "Mail Sended" : "Mail Founder"}
+                          {startup.status === "contacted" ? "Mail Sent" : "Mail Founder"}
                         </Button>
 
                         <Button
