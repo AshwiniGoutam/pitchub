@@ -8,7 +8,37 @@ import { Badge } from "@/components/ui/badge";
 import { InvestorSidebar } from "@/components/investor-sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+const YOURSTORY_RSS = 'https://yourstory.com/feed';
+const THEKEN_RSS = 'https://the-ken.com/feed';
+const CRUNCHBASE_RSS = 'https://news.crunchbase.com/feed/';
+const TRACXN_RSS = 'https://blog.tracxn.com/feed';
+// Note: VC Circle, PitchBook, and Crunchbase full integration may require API keys or paid access.
+// For VC Circle and PitchBook, no public RSS found; consider their APIs if available.
+// Tracxn is included but can be combined if needed.
+
+const parseRSS = (rssText, channelTitle) => {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(rssText, 'text/xml');
+    const items = doc.querySelectorAll('item');
+    return Array.from(items).map(item => ({
+      title: item.querySelector('title')?.textContent || '',
+      description: item.querySelector('description')?.textContent || '',
+      urlToImage: '/placeholder.svg', // Fallback; RSS may not include images
+      source: { name: channelTitle },
+      url: item.querySelector('link')?.textContent || '',
+      publishedAt: item.querySelector('pubDate')?.textContent || ''
+    })).slice(0, 10); // Limit to 10 recent items
+  } catch (error) {
+    console.error('Error parsing RSS:', error);
+    return [];
+  }
+};
+
 export default function MarketResearchPage() {
+  const [rawTrends, setRawTrends] = useState([]);
+  const [rawReports, setRawReports] = useState([]);
+  const [rawNewsItems, setRawNewsItems] = useState([]);
   const [trends, setTrends] = useState([]);
   const [reports, setReports] = useState([]);
   const [newsItems, setNewsItems] = useState([]);
@@ -30,56 +60,42 @@ export default function MarketResearchPage() {
     "Sports",
   ];
 
+  // Fetch raw data once on mount
   useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_NEWS_API_KEY;
-
-    if (!apiKey) {
-      console.error("News API key is missing.");
-      return;
-    }
-
-    const sectorQuery = selectedSector !== "All" ? `+${selectedSector.toLowerCase()}` : "";
-
-    const fetchTrends = async () => {
+    const fetchData = async (url, setter, channelTitle) => {
       try {
-        const res = await fetch(
-          `https://newsapi.org/v2/top-headlines?category=business&country=us&q=${sectorQuery}&pageSize=10&apiKey=${apiKey}`
-        );
-        const data = await res.json();
-        setTrends(data.articles || []);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+        const data = parseRSS(text, channelTitle);
+        setter(data);
       } catch (error) {
-        console.error("Error fetching trends:", error);
+        console.error(`Error fetching from ${url}:`, error);
+        setter([]);
       }
     };
 
-    const fetchReports = async () => {
-      try {
-        const res = await fetch(
-          `https://newsapi.org/v2/everything?q=industry+report+OR+market+analysis${sectorQuery}&sortBy=publishedAt&pageSize=10&apiKey=${apiKey}`
-        );
-        const data = await res.json();
-        setReports(data.articles || []);
-      } catch (error) {
-        console.error("Error fetching reports:", error);
-      }
+    fetchData(YOURSTORY_RSS, setRawTrends, 'YourStory');
+    fetchData(THEKEN_RSS, setRawReports, 'The Ken');
+    fetchData(CRUNCHBASE_RSS, setRawNewsItems, 'Crunchbase');
+    // Optionally fetch and combine Tracxn: fetchData(TRACXN_RSS, (data) => setRawNewsItems(prev => [...prev, ...data]), 'Tracxn');
+  }, []);
+
+  // Filter based on selected sector
+  useEffect(() => {
+    const filterItems = (items) => {
+      if (selectedSector === "All") return items;
+      const keyword = selectedSector.toLowerCase();
+      return items.filter(item =>
+        item.title.toLowerCase().includes(keyword) ||
+        item.description.toLowerCase().includes(keyword)
+      );
     };
 
-    const fetchNewsItems = async () => {
-      try {
-        const res = await fetch(
-          `https://newsapi.org/v2/everything?q=startup+funding+OR+venture+capital+OR+series+funding${sectorQuery}&sortBy=publishedAt&pageSize=10&apiKey=${apiKey}`
-        );
-        const data = await res.json();
-        setNewsItems(data.articles || []);
-      } catch (error) {
-        console.error("Error fetching news items:", error);
-      }
-    };
-
-    fetchTrends();
-    fetchReports();
-    fetchNewsItems();
-  }, [selectedSector]);
+    setTrends(filterItems(rawTrends));
+    setReports(filterItems(rawReports));
+    setNewsItems(filterItems(rawNewsItems));
+  }, [selectedSector, rawTrends, rawReports, rawNewsItems]);
 
   return (
     <div className="flex h-screen bg-gray-50">

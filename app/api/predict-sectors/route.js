@@ -1,3 +1,4 @@
+// File: /app/api/predict-sectors/route.js
 import { summarizeEmail } from '../../../lib/gemini';
 
 // Enhanced Keyword to sector mapping
@@ -173,7 +174,6 @@ export async function POST(request) {
         
         // First try enhanced keyword matching
         let sector = predictSectorByKeywords(email.content + ' ' + email.subject);
-        let method = 'keywords';
         
         // If keyword matching fails, use enhanced Gemini
         if (!sector) {
@@ -182,20 +182,17 @@ export async function POST(request) {
           
           try {
             sector = await summarizeEmail(email.content + ' ' + email.subject, { sectorOnly: true });
-            method = 'gemini';
             
             // If Gemini returns null/undefined, use fallback
             if (!sector) {
               fallbackUsed++;
               sector = 'Other';
-              method = 'fallback';
               console.log(`Gemini returned no sector, using fallback for email ${email.id}`);
             }
           } catch (geminiError) {
             console.error(`Gemini failed for email ${email.id}:`, geminiError);
             fallbackUsed++;
             sector = 'Other';
-            method = 'fallback';
           }
           
           // Small delay for Gemini requests to avoid rate limiting
@@ -207,8 +204,7 @@ export async function POST(request) {
         
         sectorResults.push({
           emailId: email.id,
-          sector: sector,
-          method: method
+          sector: sector
         });
 
         // Very small delay between emails
@@ -221,8 +217,7 @@ export async function POST(request) {
         fallbackUsed++;
         sectorResults.push({
           emailId: email.id,
-          sector: 'Other',
-          method: 'error_fallback'
+          sector: 'Other'
         });
       }
     }
@@ -231,13 +226,7 @@ export async function POST(request) {
     
     return Response.json({ 
       status: 'completed',
-      sectors: sectorResults,
-      stats: {
-        totalEmails: emails.length,
-        keywordMatches: keywordMatches,
-        geminiRequests: geminiRequests,
-        fallbackUsed: fallbackUsed
-      }
+      sectors: sectorResults
     });
     
   } catch (error) {

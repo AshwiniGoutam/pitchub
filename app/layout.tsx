@@ -22,13 +22,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        {/* <SessionProvider>
-            {" "}
-            {children}
-            <Analytics />
-        </SessionProvider> */}
         <Providers>
           <UserProvider>{children}</UserProvider>
+          <Analytics />
         </Providers>
       </body>
     </html>

@@ -48,6 +48,13 @@ interface EmailAnalysis {
   growthStage: "Early" | "Expansion" | "Mature";
 }
 
+interface EmailsResponse {
+  emails: EmailData[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export default function DealDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -63,12 +70,12 @@ export default function DealDetailPage() {
       try {
         const emailId = params.id as string;
         
-        // Fetch all emails and find the matching one
-        const res = await fetch("/api/gmail");
+        // Fetch all emails without pagination to find the specific one
+        const res = await fetch("/api/gmail?page=1&limit=1000"); // Large limit to get all emails
         if (!res.ok) throw new Error("Failed to fetch emails");
-        const emailsData = await res.json();
+        const data: EmailsResponse = await res.json();
         
-        const foundEmail = emailsData.find((email: EmailData) => email.id === emailId);
+        const foundEmail = data.emails.find((email: EmailData) => email.id === emailId);
         if (foundEmail) {
           setEmailData(foundEmail);
           
@@ -123,6 +130,8 @@ export default function DealDetailPage() {
               growthStage: "Early"
             });
           }
+        } else {
+          console.error("Email not found with ID:", emailId);
         }
       } catch (err) {
         console.error("Error fetching email data:", err);
@@ -143,7 +152,9 @@ export default function DealDetailPage() {
       }
     }
     
-    fetchEmailData();
+    if (params.id) {
+      fetchEmailData();
+    }
   }, [params.id])
 
   // Function to download attachments
@@ -277,7 +288,8 @@ export default function DealDetailPage() {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <h2 className="text-2xl font-bold mb-4">Deal Not Found</h2>
-            <Button onClick={() => router.push('/inbox')} className="bg-emerald-600 hover:bg-emerald-700">
+            <p className="text-gray-600 mb-4">The requested deal could not be found.</p>
+            <Button onClick={() => router.push('/dashboard/investor/inbox')} className="bg-emerald-600 hover:bg-emerald-700">
               Back to Inbox
             </Button>
           </div>
@@ -295,8 +307,8 @@ export default function DealDetailPage() {
         <header className="sticky top-0 z-10 border-b bg-white">
           <div className="flex h-16 items-center justify-between px-8">
             <div className="flex items-center gap-2 text-sm text-gray-600">
-              <button onClick={() => router.push("/inbox")} className="hover:text-gray-900">
-                Deals
+              <button onClick={() => router.push("/dashboard/investor/inbox")} className="hover:text-gray-900">
+                Inbox
               </button>
               <ChevronRight className="h-4 w-4" />
               <span className="text-gray-900">{getCompanyName()}</span>

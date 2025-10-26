@@ -31,7 +31,37 @@ model InvestorProfile {
   excludedKeywords String[]
 }
 
+model Email {
+  id           String   @id @unique
+  from         String
+  fromEmail    String
+  subject      String
+  content      String
+  timestamp    DateTime
+  isRead       Boolean  @default(false)
+  isStarred    Boolean  @default(false)
+  status       String   @default("new")
+  relevanceScore Int    @default(0)
+  
+  // Cached analysis
+  sector       String?
+  predictionMethod String? // 'keywords', 'gemini', 'fallback'
+  summary      String?
+  competitiveAnalysis Json? // Store as JSON array
+  marketResearch String?
+  fundingMentioned Boolean @default(false)
+  growthStage  String? // 'Early', 'Expansion', 'Mature'
+  
+  // Attachments (stored as JSON)
+  attachments  Json?
+  
+  // Timestamps
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  lastFetched  DateTime @default(now())
 
+  @@map("emails")
+}
 
 
 

@@ -171,7 +171,7 @@ function computeRelevance(email, thesis) {
 
 // ------------------ Main Handler ------------------
 
-export async function GET() {
+export async function GET(request) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), {
@@ -180,6 +180,12 @@ export async function GET() {
   }
 
   try {
+    // Parse query parameters for pagination
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const offset = (page - 1) * limit;
+
     // 🔹 Step 1: Fetch investor thesis
     let thesis = {
       sectors: [],
@@ -204,9 +210,11 @@ export async function GET() {
       console.warn("⚠️ Error fetching thesis:", err);
     }
 
-    // 🔹 Step 2: Fetch Gmail messages (last 3 months)
+    // 🔹 Step 2: Fetch Gmail messages (last 3 months) with pagination
     const query =
       "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
+    
+    // First, get total count
     const listRes = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
         query
@@ -224,12 +232,18 @@ export async function GET() {
     }
 
     const listData = await listRes.json();
-    if (!listData.messages)
-      return new Response(JSON.stringify([]), { status: 200 });
+    const totalMessages = listData.messages?.length || 0;
+    
+    if (!listData.messages) {
+      return new Response(JSON.stringify({ emails: [], total: 0 }), { status: 200 });
+    }
 
-    // 🔹 Step 3: Process each email
+    // Apply pagination
+    const paginatedMessages = listData.messages.slice(offset, offset + limit);
+
+    // 🔹 Step 3: Process only the paginated emails
     const emails = await Promise.all(
-      listData.messages.map(async (msg) => {
+      paginatedMessages.map(async (msg) => {
         const detailRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
           { headers: { Authorization: `Bearer ${session.accessToken}` } }
@@ -289,7 +303,12 @@ export async function GET() {
       .filter((e) => e && e.sector !== "General")
       .sort((a, b) => b.relevanceScore - a.relevanceScore);
 
-    return new Response(JSON.stringify(filtered), { status: 200 });
+    return new Response(JSON.stringify({ 
+      emails: filtered, 
+      total: totalMessages,
+      page,
+      limit 
+    }), { status: 200 });
   } catch (err) {
     console.error("🔥 Gmail API error:", err);
     return new Response(
