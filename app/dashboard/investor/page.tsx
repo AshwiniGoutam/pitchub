@@ -72,11 +72,13 @@ export default function DashboardPage() {
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
         setStats(statsData);
+        console.log("statsData", statsData);
       }
 
       if (startupsResponse.ok) {
         const startupsData = await startupsResponse.json();
         setStartups(startupsData);
+        console.log("startupsData", startupsData);
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
