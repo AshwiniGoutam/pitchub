@@ -252,7 +252,7 @@ export default function MarketResearchPage() {
           className={`flex items-center gap-2 px-4 py-2 rounded-full ${
             selectedSector === sector.name 
               ? "bg-blue-600 text-white shadow-sm" 
-              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-dark"
           }`}
           onClick={() => setSelectedSector(sector.name)}
         >
