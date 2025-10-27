@@ -25,16 +25,121 @@ export default function Page() {
     body: "",
   });
   const [Loading, setLoading] = useState(false);
+  const [investorThesis, setInvestorThesis] = useState(null);
 
   useEffect(() => {
+    fetchInvestorThesis();
     fetchStartups();
   }, []);
+
+  // Fetch investor thesis
+  const fetchInvestorThesis = async () => {
+    try {
+      const res = await fetch("/api/investor/thesis");
+      if (res.ok) {
+        const thesis = await res.json();
+        setInvestorThesis(thesis);
+      }
+    } catch (err) {
+      console.error("Error fetching investor thesis:", err);
+    }
+  };
+
+  // Calculate relevancy score based on investor thesis
+  const calculateRelevancyScore = (startup) => {
+    if (!investorThesis) return 80; // Default score if no thesis available
+
+    let score = 0;
+    let totalWeight = 0;
+    const weights = {
+      sector: 30,
+      stage: 25,
+      funding: 20,
+      geography: 15,
+      keywords: 10
+    };
+
+    // Sector matching
+    if (investorThesis.sectors && investorThesis.sectors.length > 0) {
+      if (investorThesis.sectors.includes(startup.sector)) {
+        score += weights.sector;
+      }
+      totalWeight += weights.sector;
+    }
+
+    // Stage matching
+    if (investorThesis.stages && investorThesis.stages.length > 0) {
+      if (investorThesis.stages.includes(startup.stage)) {
+        score += weights.stage;
+      }
+      totalWeight += weights.stage;
+    }
+
+    // Funding range matching
+    if (investorThesis.checkSizeMin !== undefined && investorThesis.checkSizeMax !== undefined && startup.fundingRequirement) {
+      const startupMin = startup.fundingRequirement.min || 0;
+      const startupMax = startup.fundingRequirement.max || 0;
+      const thesisMin = investorThesis.checkSizeMin;
+      const thesisMax = investorThesis.checkSizeMax;
+
+      // Check if funding ranges overlap
+      if (startupMin <= thesisMax && startupMax >= thesisMin) {
+        score += weights.funding;
+      }
+      totalWeight += weights.funding;
+    }
+
+    // Geography matching (simplified - you might want to enhance this)
+    if (investorThesis.geographies && investorThesis.geographies.length > 0 && startup.location) {
+      const startupLocation = startup.location.toLowerCase();
+      if (investorThesis.geographies.some(geo => startupLocation.includes(geo.toLowerCase()))) {
+        score += weights.geography;
+      }
+      totalWeight += weights.geography;
+    }
+
+    // Keyword matching
+    if (investorThesis.keywords && investorThesis.keywords.length > 0 && startup.description) {
+      const description = startup.description.toLowerCase();
+      const matchedKeywords = investorThesis.keywords.filter(keyword => 
+        description.includes(keyword.toLowerCase())
+      );
+      if (matchedKeywords.length > 0) {
+        score += (matchedKeywords.length / investorThesis.keywords.length) * weights.keywords;
+      }
+      totalWeight += weights.keywords;
+    }
+
+    // Excluded keywords penalty
+    if (investorThesis.excludedKeywords && investorThesis.excludedKeywords.length > 0 && startup.description) {
+      const description = startup.description.toLowerCase();
+      const excludedMatches = investorThesis.excludedKeywords.filter(keyword =>
+        description.includes(keyword.toLowerCase())
+      );
+      if (excludedMatches.length > 0) {
+        score *= 0.7; // 30% penalty for excluded keywords
+      }
+    }
+
+    // Calculate final score as percentage
+    const finalScore = totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 80;
+    
+    // Ensure score is between 0-100
+    return Math.min(100, Math.max(0, finalScore));
+  };
 
   const fetchStartups = async () => {
     try {
       const res = await fetch("/api/investor/startups", { cache: "no-store" });
       const data = await res.json();
-      setStartups(data);
+      
+      // Calculate relevancy scores for each startup
+      const startupsWithScores = data.map(startup => ({
+        ...startup,
+        relevanceScore: calculateRelevancyScore(startup)
+      }));
+      
+      setStartups(startupsWithScores);
     } catch (err) {
       console.error("Error fetching startups:", err);
     }
@@ -44,14 +149,10 @@ export default function Page() {
     return new Date(dateString).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
-      //   year: "numeric",
     });
   };
 
   const sendEmail = async () => {
-    // console.log(selectedStartup);
-    // return
-
     try {
       setLoading(true);
 
@@ -60,14 +161,13 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...emailContent,
-          startupId: selectedStartup?._id, // 👈 include startup id
+          startupId: selectedStartup?._id,
         }),
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        // ✅ Update local state so UI shows "Contacted" immediately
         setStartups((prev) =>
           prev.map((s) =>
             s._id === selectedStartup?._id ? { ...s, status: "contacted" } : s
@@ -104,9 +204,6 @@ export default function Page() {
                 An overview of your deal flow activity.
               </p>
             </div>
-            {/* <Button variant="ghost" size="icon">
-              <Bell className="h-5 w-5" />
-            </Button> */}
           </div>
         </header>
         <div className="p-8 max-w-7xl mx-auto">
@@ -177,18 +274,14 @@ export default function Page() {
                         {startup.stage || "—"}
                       </td>
                       <td className="text-sm px-6 py-4 font-medium">Email</td>
-                      {/* <td className="text-sm px-6 py-4 text-sm">
-                        ₹{startup.fundingRequirement?.min?.toLocaleString()} – ₹
-                        {startup.fundingRequirement?.max?.toLocaleString()}
-                      </td> */}
                       <td className="text-sm px-6 py-4 text-sm">
                         <div className="flex items-center gap-3">
                           <Progress
-                            value={startup?.relevanceScore || 80}
+                            value={startup.relevanceScore}
                             className="h-2 w-24"
                           />
                           <span className="text-sm font-medium">
-                            {startup?.relevanceScore || 80}%
+                            {startup.relevanceScore}%
                           </span>
                         </div>
                       </td>
@@ -215,16 +308,6 @@ export default function Page() {
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        {/* <Button
-                          variant="default"
-                          className="mr-2 text-xs bg-white hover:bg-emerald-600 text-dark hover:text-white border border-[#ccc] font-medium"
-                          onClick={() => {
-                            setSelectedStartup(startup);
-                            setIsModalOpen(true);
-                          }}
-                        >
-                          Mail Founder
-                        </Button> */}
                         <Button
                           variant="default"
                           className="mr-2 text-xs bg-white hover:bg-emerald-600 text-dark hover:text-white border border-[#ccc] font-medium"
@@ -252,9 +335,6 @@ export default function Page() {
                         >
                           View Details
                         </Button>
-                        {/* <span className="font-medium d-block text-xs">
-                          {formatDate(startup.createdAt)}
-                        </span> */}
                       </td>
                     </tr>
                   ))}
@@ -315,7 +395,7 @@ export default function Page() {
                   </p>
                   <p className="mb-1">
                     <span className="font-semibold">Relevance Score:</span>{" "}
-                    {selectedStartup.relevanceScore || "—"}%
+                    {selectedStartup.relevanceScore}%
                   </p>
                   <p className="mb-1">
                     <span className="font-semibold">Status:</span>{" "}
@@ -369,17 +449,6 @@ export default function Page() {
                     <Download /> Download Pitch Deck
                   </Button>
                 )}
-
-                {/* {selectedStartup.website && (
-                  <Button
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() =>
-                      window.open(selectedStartup.website, "_blank")
-                    }
-                  >
-                    🌐 Visit Website
-                  </Button>
-                )} */}
               </div>
             </>
           )}
