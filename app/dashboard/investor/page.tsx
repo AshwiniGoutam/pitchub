@@ -8,6 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { InvestorSidebar } from "@/components/investor-sidebar";
 import { useEffect, useState } from "react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 interface DashboardStats {
   totalPitches: number;
@@ -114,6 +122,15 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  const data = [
+    { name: "FinTech", value: 35 },
+    { name: "HealthTech", value: 30 },
+    { name: "SaaS", value: 20 },
+    { name: "DeepTech", value: 15 },
+  ];
+  const COLORS = ["#10B981", "#3B82F6", "#EAB308", "#EF4444"];
+
   return (
     <div className="flex h-screen bg-gray-50">
       <InvestorSidebar />
@@ -139,9 +156,9 @@ export default function DashboardPage() {
         <main className="p-8">
           {/* <p className="mb-8 text-gray-600">Here's your quality deal snapshot.</p> */}
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Summary */}
-            <Card>
+          <div className="grid gap-6 lg:grid-cols-12">
+            {/* Summary - col-span-3 */}
+            <Card className="lg:col-span-5">
               <CardHeader>
                 <CardTitle>Summary</CardTitle>
               </CardHeader>
@@ -186,96 +203,37 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Deal Flow by Sector */}
-            <Card>
+            {/* Deal Flow by Sector - col-span-9 */}
+            <Card className="lg:col-span-7 w-full">
               <CardHeader>
                 <CardTitle>Deal Flow by Sector</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="mb-6 flex items-center justify-center">
-                  <svg viewBox="0 0 200 200" className="h-48 w-48">
-                    <circle cx="100" cy="100" r="80" fill="rgb(16 185 129)" />
-                    <path
-                      d="M 100,100 L 100,20 A 80,80 0 0,1 180,100 Z"
-                      fill="rgb(59 130 246)"
-                    />
-                    <path
-                      d="M 100,100 L 180,100 A 80,80 0 0,1 140,170 Z"
-                      fill="rgb(234 179 8)"
-                    />
-                    <path
-                      d="M 100,100 L 140,170 A 80,80 0 0,1 60,170 Z"
-                      fill="rgb(239 68 68)"
-                    />
-                  </svg>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-full bg-emerald-500" />
-                      <span>FinTech</span>
-                    </div>
-                    <span className="text-gray-500">(35%)</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-full bg-blue-500" />
-                      <span>HealthTech</span>
-                    </div>
-                    <span className="text-gray-500">(30%)</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-full bg-yellow-500" />
-                      <span>SaaS</span>
-                    </div>
-                    <span className="text-gray-500">(20%)</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-full bg-red-500" />
-                      <span>DeepTech</span>
-                    </div>
-                    <span className="text-gray-500">(15%)</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Funding Round & Lead Investor Status */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Funding Round</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm text-gray-600">First Round</span>
-                    <span className="text-sm font-semibold">60%</span>
-                  </div>
-                  <Progress value={60} className="h-2" />
-                </div>
-
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Follow-on</span>
-                    <span className="text-sm font-semibold">40%</span>
-                  </div>
-                  <Progress value={40} className="h-2 [&>div]:bg-blue-500" />
-                </div>
-
-                <div className="pt-4">
-                  <h3 className="mb-4 font-semibold">Lead Investor Status</h3>
-                  <div className="flex items-end justify-center gap-8">
-                    <div className="text-center">
-                      <div className="mb-2 h-32 w-16 rounded-lg bg-emerald-500" />
-                      <p className="text-sm text-gray-600">Yes</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="mb-2 h-24 w-16 rounded-lg bg-red-200" />
-                      <p className="text-sm text-gray-600">No</p>
-                    </div>
-                  </div>
+                <div className="h-100">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={data}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={110}
+                        dataKey="value"
+                        nameKey="name"
+                        label={({ name, percent }) =>
+                          `${name} ${(percent * 100).toFixed(0)}%`
+                        }
+                      >
+                        {data.map((entry, index) => (
+                          <Cell
+                            key={index}
+                            fill={COLORS[index % COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
               </CardContent>
             </Card>
