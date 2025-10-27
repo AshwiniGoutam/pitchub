@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Search, Filter, Bell, ArrowRight, Sparkles, ExternalLink, Calendar, AlertCircle } from "lucide-react";
+import { Search, ArrowRight, TrendingUp, BarChart3, FileText, Newspaper, Sparkles, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,14 +8,61 @@ import { Badge } from "@/components/ui/badge";
 import { InvestorSidebar } from "@/components/investor-sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Single source - TechCrunch
-const TECHCRUNCH_FEED = "https://techcrunch.com/feed/";
+// Multiple RSS feeds
+const RSS_FEEDS = [
+  { name: "TechCrunch", url: "https://techcrunch.com/feed/" },
+  { name: "The Ken", url: "https://the-ken.com/feed/" },
+  { name: "Crunchbase", url: "https://news.crunchbase.com/feed/" },
+  { name: "YourStory", url: "https://yourstory.com/feed" }
+];
+
+// Updated sector definitions with better organization
+const SECTORS = [
+  { 
+    name: "Technology", 
+    keywords: ["tech", "software", "ai", "artificial intelligence", "machine learning", "cloud", "saas", "iot", "blockchain"] 
+  },
+  { 
+    name: "Healthcare", 
+    keywords: ["health", "medical", "biotech", "pharma", "healthcare", "telemedicine", "digital health", "medtech"] 
+  },
+  { 
+    name: "Finance", 
+    keywords: ["fintech", "banking", "finance", "investment", "crypto", "blockchain", "payments", "wealth"] 
+  },
+  { 
+    name: "Energy", 
+    keywords: ["energy", "renewable", "solar", "wind", "clean tech", "sustainability", "climate", "green"] 
+  },
+  { 
+    name: "E-commerce", 
+    keywords: ["ecommerce", "retail", "shopping", "marketplace", "d2c", "b2c", "consumer", "logistics"] 
+  },
+  { 
+    name: "Education", 
+    keywords: ["edtech", "education", "learning", "online education", "skills", "training"] 
+  },
+  { 
+    name: "Real Estate", 
+    keywords: ["real estate", "proptech", "housing", "property", "construction", "mortgage"] 
+  },
+  { 
+    name: "Automotive", 
+    keywords: ["automotive", "ev", "electric vehicle", "autonomous", "mobility", "transportation"] 
+  },
+  { 
+    name: "Entertainment", 
+    keywords: ["entertainment", "gaming", "media", "streaming", "content", "creators"] 
+  },
+  { 
+    name: "Other", 
+    keywords: [] 
+  }
+];
 
 // Function to parse RSS XML
 const parseRSS = async (url, sourceName) => {
   try {
-    console.log(`Fetching from: ${url}`);
-    
     // Use CORS proxy to avoid browser restrictions
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
     const response = await fetch(proxyUrl);
@@ -25,22 +72,19 @@ const parseRSS = async (url, sourceName) => {
     }
     
     const data = await response.json();
-    console.log('Raw data received from proxy:', data);
     
     if (!data.contents) {
       throw new Error('No content received');
     }
 
-    // The contents might be base64 encoded - let's check and decode it
+    // The contents might be base64 encoded
     let xmlContent = data.contents;
     
     // Check if it's a data URL with base64
     if (xmlContent.startsWith('data:')) {
-      console.log('Detected data URL, extracting base64 content...');
       const base64Match = xmlContent.match(/base64,(.*)/);
       if (base64Match) {
         xmlContent = atob(base64Match[1]);
-        console.log('Decoded base64 content:', xmlContent.substring(0, 500) + '...');
       }
     }
 
@@ -50,63 +94,34 @@ const parseRSS = async (url, sourceName) => {
     // Check for RSS parsing errors
     const parseError = xmlDoc.querySelector('parsererror');
     if (parseError) {
-      console.error('RSS Parse Error:', parseError.textContent);
-      console.error('First 500 chars of XML:', xmlContent.substring(0, 500));
       throw new Error('Invalid RSS feed format');
     }
 
     const items = xmlDoc.querySelectorAll("item");
-    console.log(`Found ${items.length} items in RSS feed`);
 
     if (items.length === 0) {
       return [];
     }
 
-    const articles = Array.from(items).slice(0, 20).map((item, index) => {
+    const articles = Array.from(items).slice(0, 15).map((item) => {
       const title = item.querySelector("title")?.textContent?.trim() || "No title available";
       const description = item.querySelector("description")?.textContent?.trim() || "";
       const link = item.querySelector("link")?.textContent?.trim() || "#";
       const pubDate = item.querySelector("pubDate")?.textContent?.trim() || new Date().toISOString();
-      
-      // Extract image from various possible locations
-      let imageUrl = "/placeholder.svg";
-      
-      // Try media:content first (common in TechCrunch)
-      const mediaContent = item.querySelector("media\\:content, content");
-      if (mediaContent) {
-        imageUrl = mediaContent.getAttribute("url") || "/placeholder.svg";
-      }
-      
-      // Try enclosure
-      const enclosure = item.querySelector("enclosure");
-      if (enclosure && enclosure.getAttribute("type")?.startsWith("image/")) {
-        imageUrl = enclosure.getAttribute("url") || "/placeholder.svg";
-      }
-      
-      // Try to extract image from description (common in RSS feeds)
-      const imgMatch = description.match(/<img[^>]+src="([^">]+)"/);
-      if (imgMatch) {
-        imageUrl = imgMatch[1];
-      }
 
-      // Clean description from HTML tags and truncate
+      // Clean description
       const cleanDescription = description
         .replace(/<[^>]*>/g, "")
         .replace(/&[^;]+;/g, "")
-        .substring(0, 150) + (description.length > 150 ? "..." : "");
+        .substring(0, 120) + (description.length > 120 ? "..." : "");
 
-      const article = {
+      return {
         title,
         description: cleanDescription || "No description available",
-        urlToImage: imageUrl,
         source: { name: sourceName },
         url: link,
         publishedAt: pubDate,
-        category: "technology"
       };
-
-      console.log(`Article ${index + 1}:`, article);
-      return article;
     });
 
     return articles;
@@ -117,76 +132,93 @@ const parseRSS = async (url, sourceName) => {
   }
 };
 
-// NEW: Function to just fetch and display raw data
-const fetchRawData = async () => {
-  try {
-    console.log("=== FETCHING RAW DATA ===");
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(TECHCRUNCH_FEED)}`;
-    console.log("Proxy URL:", proxyUrl);
+// Function to categorize articles by sector
+const categorizeArticles = (articles) => {
+  if (!articles || articles.length === 0) return [];
+
+  return articles.map(article => {
+    let assignedSector = "Other";
     
-    const response = await fetch(proxyUrl);
-    console.log("Response status:", response.status);
-    console.log("Response headers:", Object.fromEntries(response.headers.entries()));
-    
-    const data = await response.json();
-    console.log("=== COMPLETE RAW RESPONSE ===");
-    console.log("Full response object:", data);
-    
-    if (data.contents) {
-      console.log("=== CONTENTS DATA ===");
-      console.log("Contents type:", typeof data.contents);
-      console.log("First 1000 chars of contents:", data.contents.substring(0, 1000));
+    // Find matching sector based on keywords
+    for (const sector of SECTORS) {
+      if (sector.name === "Other") continue;
       
-      // Check if it's base64 encoded
-      if (data.contents.startsWith('data:')) {
-        console.log("=== BASE64 DECODING ===");
-        const base64Match = data.contents.match(/base64,(.*)/);
-        if (base64Match) {
-          const decoded = atob(base64Match[1]);
-          console.log("Decoded XML (first 1000 chars):", decoded.substring(0, 1000));
-        }
+      const hasKeyword = sector.keywords.some(keyword => 
+        article.title.toLowerCase().includes(keyword.toLowerCase()) ||
+        article.description.toLowerCase().includes(keyword.toLowerCase())
+      );
+      
+      if (hasKeyword) {
+        assignedSector = sector.name;
+        break;
       }
     }
     
-    if (data.status) {
-      console.log("=== STATUS INFO ===");
-      console.log("Status:", data.status);
-    }
-    
-    return data;
-  } catch (error) {
-    console.error("Error fetching raw data:", error);
-    return null;
-  }
+    return {
+      ...article,
+      sector: assignedSector
+    };
+  });
 };
 
 export default function MarketResearchPage() {
   const [allNews, setAllNews] = useState([]);
-  const [trends, setTrends] = useState([]);
-  const [reports, setReports] = useState([]);
-  const [newsItems, setNewsItems] = useState([]);
-  const [showAllTrends, setShowAllTrends] = useState(false);
-  const [showAllReports, setShowAllReports] = useState(false);
-  const [showAllNews, setShowAllNews] = useState(false);
-  const [selectedSector, setSelectedSector] = useState("All");
+  const [categorizedNews, setCategorizedNews] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [rawData, setRawData] = useState(null);
+  const [selectedSector, setSelectedSector] = useState("Show All");
 
-  const sectors = [
-    "All",
-    "Technology",
-    "Fintech",
-    "Healthcare",
-    "E-commerce",
-    "SaaS",
-    "EdTech",
-    "Clean Energy",
-    "Real Estate",
-    "Consumer",
-  ];
+  // Fetch news from all RSS feeds
+  useEffect(() => {
+    const fetchAllNews = async () => {
+      setLoading(true);
+      try {
+        const fetchPromises = RSS_FEEDS.map(feed => 
+          parseRSS(feed.url, feed.name)
+        );
+        
+        const results = await Promise.all(fetchPromises);
+        const allArticles = results.flat();
+        
+        // Remove duplicates based on title
+        const uniqueArticles = allArticles.filter((article, index, self) =>
+          index === self.findIndex(a => a.title === article.title)
+        );
+        
+        setAllNews(uniqueArticles);
+        
+        // Categorize articles
+        const categorized = categorizeArticles(uniqueArticles);
+        setCategorizedNews(categorized);
+        
+      } catch (error) {
+        console.error('Error fetching news:', error);
+        setAllNews([]);
+        setCategorizedNews([]);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Format date
+    fetchAllNews();
+  }, []);
+
+  // Filter news based on selected sector
+  const filteredNews = selectedSector === "Show All" 
+    ? categorizedNews 
+    : categorizedNews.filter(article => article.sector === selectedSector);
+
+  // Get sector-wise article counts
+  const sectorCounts = SECTORS.map(sector => ({
+    ...sector,
+    count: categorizedNews.filter(article => article.sector === sector.name).length
+  })).filter(sector => sector.count > 0 || sector.name === "Other");
+
+  const handleArticleClick = (url) => {
+    if (url && url !== "#") {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
   const formatDate = (dateString) => {
     try {
       const date = new Date(dateString);
@@ -200,101 +232,107 @@ export default function MarketResearchPage() {
     }
   };
 
-  // Fetch news from TechCrunch
-  useEffect(() => {
-    const fetchNews = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        console.log("=== STARTING FETCH PROCESS ===");
-        
-        // First, let's fetch and log the raw data
-        const raw = await fetchRawData();
-        setRawData(raw);
-        
-        // Then parse the RSS
-        console.log("=== PARSING RSS ===");
-        const articles = await parseRSS(TECHCRUNCH_FEED, "TechCrunch");
-        console.log("Fetched articles:", articles);
-        
-        setAllNews(articles);
-        
-        if (articles.length === 0) {
-          setError("No news available from TechCrunch. Please try again later.");
-        } else {
-          // Distribute articles to different sections
-          setTrends(articles.slice(0, 6));
-          setReports(articles.slice(6, 12));
-          setNewsItems(articles.slice(12, 20));
-        }
-      } catch (error) {
-        console.error('Error fetching news:', error);
-        setError("Failed to load news from TechCrunch. Please check your connection and try again.");
-        setAllNews([]);
-        setTrends([]);
-        setReports([]);
-        setNewsItems([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchNews();
-  }, []);
-
-  const filteredTrends = selectedSector === "All" 
-    ? trends 
-    : trends.filter(item => 
-        item.title.toLowerCase().includes(selectedSector.toLowerCase()) ||
-        item.description.toLowerCase().includes(selectedSector.toLowerCase())
-      );
-
-  const filteredReports = selectedSector === "All" 
-    ? reports 
-    : reports.filter(item => 
-        item.title.toLowerCase().includes(selectedSector.toLowerCase()) ||
-        item.description.toLowerCase().includes(selectedSector.toLowerCase())
-      );
-
-  const filteredNews = selectedSector === "All" 
-    ? newsItems 
-    : newsItems.filter(item => 
-        item.title.toLowerCase().includes(selectedSector.toLowerCase()) ||
-        item.description.toLowerCase().includes(selectedSector.toLowerCase())
-      );
-
-  const handleArticleClick = (url) => {
-    if (url && url !== "#") {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-  };
-
-  const EmptyState = ({ message, icon: Icon = AlertCircle }) => (
+  const EmptyState = ({ message }) => (
     <div className="flex flex-col items-center justify-center py-12 text-center">
-      <Icon className="h-12 w-12 text-slate-400 mb-4" />
-      <h3 className="text-lg font-semibold text-slate-600 mb-2">No Content Available</h3>
+      <AlertCircle className="h-12 w-12 text-slate-400 mb-4" />
+      <h3 className="text-lg font-semibold text-slate-600 mb-2">No Data Available</h3>
       <p className="text-slate-500 max-w-md">{message}</p>
     </div>
   );
 
+  const SectorTabs = () => (
+    <div className="flex flex-wrap gap-2 mb-8">
+      {[
+        { name: "Show All", count: allNews.length },
+        ...sectorCounts
+      ].map((sector) => (
+        <Button
+          key={sector.name}
+          variant={selectedSector === sector.name ? "default" : "outline"}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full ${
+            selectedSector === sector.name 
+              ? "bg-blue-600 text-white shadow-sm" 
+              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+          }`}
+          onClick={() => setSelectedSector(sector.name)}
+        >
+          {sector.name}
+          <Badge 
+            variant={selectedSector === sector.name ? "secondary" : "outline"}
+            className={`text-xs ${
+              selectedSector === sector.name 
+                ? "bg-white text-blue-600" 
+                : "bg-slate-100 text-slate-600"
+            }`}
+          >
+            {sector.count}
+          </Badge>
+        </Button>
+      ))}
+    </div>
+  );
+
+  const NewsGrid = () => {
+    if (filteredNews.length === 0) {
+      return <EmptyState message={`No news available for ${selectedSector} sector.`} />;
+    }
+
+    return (
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {filteredNews.map((article, index) => (
+          <Card 
+            key={index} 
+            className="border border-slate-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full flex flex-col"
+            onClick={() => handleArticleClick(article.url)}
+          >
+            <CardContent className="p-6 flex-1 flex flex-col">
+              <div className="flex items-center gap-2 mb-3">
+                <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
+                  {article.source.name}
+                </Badge>
+                <span className="text-xs text-slate-500">{formatDate(article.publishedAt)}</span>
+              </div>
+              
+              <h3 className="font-semibold text-slate-800 text-lg mb-3 line-clamp-2 flex-1">
+                {article.title}
+              </h3>
+              
+              <p className="text-sm text-slate-600 mb-4 leading-relaxed line-clamp-3">
+                {article.description}
+              </p>
+              
+              <div className="flex items-center justify-between mt-auto">
+                <Button variant="ghost" className="text-slate-700 hover:text-slate-900 p-0 h-auto text-sm">
+                  Read More
+                  <ArrowRight className="h-4 w-4 ml-1" />
+                </Button>
+                <Badge variant="outline" className="text-xs bg-slate-50">
+                  {article.sector}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  };
+
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 to-blue-50/30">
       <InvestorSidebar />
 
       <div className="flex-1 overflow-auto">
         {/* Header */}
-        <header className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur-sm">
+        <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-10">
           <div className="flex h-16 items-center justify-between px-8">
             <div className="flex flex-1 items-center gap-4">
               <div className="relative w-96">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input placeholder="Search industries, trends, or companies..." className="pl-10" />
+                <Input 
+                  placeholder="Search industries, trends, or companies..." 
+                  className="pl-10 border-slate-200 focus:border-slate-300"
+                />
               </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon">
-                <Bell className="h-5 w-5 text-slate-600" />
-              </Button>
             </div>
           </div>
         </header>
@@ -307,294 +345,24 @@ export default function MarketResearchPage() {
               Market Research
             </h1>
             <p className="mt-2 text-slate-600">
-              Latest news from TechCrunch
+              Explore news and trends across different sectors
             </p>
           </div>
 
-          {/* Debug Info Panel */}
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <h3 className="text-lg font-semibold text-yellow-800 mb-2">Debug Information</h3>
-            <div className="text-sm text-yellow-700 space-y-1">
-              <p><strong>Source URL:</strong> {TECHCRUNCH_FEED}</p>
-              <p><strong>Articles Loaded:</strong> {allNews.length}</p>
-              <p><strong>Raw Data Available:</strong> {rawData ? "Yes" : "No"}</p>
-              <p><strong>Check browser console for detailed raw data logs</strong></p>
-            </div>
-          </div>
-
-          {/* Search, Filter, and Sector Select */}
-          <div className="mb-8 flex items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input placeholder="Search TechCrunch articles..." className="pl-10" />
-            </div>
-            <Button variant="outline" className="gap-2 bg-white border-slate-300">
-              <Filter className="h-4 w-4" />
-              Filter
-            </Button>
-            <Select value={selectedSector} onValueChange={setSelectedSector}>
-              <SelectTrigger className="w-[180px] bg-white">
-                <SelectValue placeholder="Select sector" />
-              </SelectTrigger>
-              <SelectContent>
-                {sectors.map((sector) => (
-                  <SelectItem key={sector} value={sector}>
-                    {sector}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Error State */}
-          {error && (
-            <div className="mb-8 rounded-lg bg-red-50 p-6 border border-red-200">
-              <div className="flex items-center">
-                <AlertCircle className="h-5 w-5 text-red-400 mr-3" />
-                <div>
-                  <h3 className="text-sm font-medium text-red-800">Unable to load news</h3>
-                  <p className="text-sm text-red-700 mt-1">{error}</p>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Sector Tabs */}
+          <SectorTabs />
 
           {/* Loading State */}
           {loading && (
             <div className="flex justify-center items-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-              <span className="ml-4 text-slate-600">Loading news from TechCrunch...</span>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-3 text-slate-600">Loading news from multiple sources...</span>
             </div>
           )}
 
-          {/* Market Trends Section */}
-          {!loading && !error && (
-            <div className="mb-12">
-              <div className="mb-6 flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-slate-800">Latest Tech News</h2>
-                {filteredTrends.length > 3 && (
-                  <Button 
-                    variant="link" 
-                    className="text-blue-600 hover:text-blue-700"
-                    onClick={() => setShowAllTrends(!showAllTrends)}
-                  >
-                    {showAllTrends ? "Show Less" : "See All"}
-                  </Button>
-                )}
-              </div>
-
-              {filteredTrends.length === 0 ? (
-                <EmptyState message="No trending news available for the selected sector. Try selecting 'All' sectors." />
-              ) : (
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {(showAllTrends ? filteredTrends : filteredTrends.slice(0, 3)).map((trend, index) => (
-                    <Card 
-                      key={index} 
-                      className="overflow-hidden border-slate-200 hover:shadow-lg transition-shadow cursor-pointer bg-white"
-                      onClick={() => handleArticleClick(trend.url)}
-                    >
-                      <div className="aspect-video overflow-hidden bg-gradient-to-br from-blue-100 to-purple-100">
-                        <img
-                          src={trend.urlToImage || "/placeholder.svg"}
-                          alt={trend.title}
-                          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                          onError={(e) => {
-                            e.target.src = "/placeholder.svg";
-                          }}
-                        />
-                      </div>
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-3">
-                          <Badge variant="secondary" className="bg-orange-100 text-orange-700">
-                            TechCrunch
-                          </Badge>
-                          <ExternalLink className="h-4 w-4 text-slate-400" />
-                        </div>
-                        <h3 className="text-xl font-semibold text-slate-800 mb-2 line-clamp-2">
-                          {trend.title}
-                        </h3>
-                        <p className="text-slate-600 line-clamp-3 mb-3">
-                          {trend.description}
-                        </p>
-                        <div className="flex items-center text-sm text-slate-500">
-                          <Calendar className="h-3 w-3 mr-1" />
-                          {formatDate(trend.publishedAt)}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Industry Reports Section */}
-          {!loading && !error && (
-            <div className="mb-12">
-              <div className="mb-6 flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-slate-800">
-                  Tech Analysis & Reports
-                </h2>
-                {filteredReports.length > 3 && (
-                  <Button 
-                    variant="link" 
-                    className="text-blue-600 hover:text-blue-700"
-                    onClick={() => setShowAllReports(!showAllReports)}
-                  >
-                    {showAllReports ? "Show Less" : "See All"}
-                  </Button>
-                )}
-              </div>
-
-              {filteredReports.length === 0 ? (
-                <EmptyState message="No analysis available for the selected sector. Try selecting 'All' sectors." />
-              ) : (
-                <div className="space-y-4">
-                  {(showAllReports ? filteredReports : filteredReports.slice(0, 3)).map((report, index) => (
-                    <Card 
-                      key={index} 
-                      className="border-slate-200 hover:shadow-md transition-shadow cursor-pointer bg-white"
-                      onClick={() => handleArticleClick(report.url)}
-                    >
-                      <CardContent className="flex gap-6 p-6">
-                        <div className="flex h-24 w-20 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 overflow-hidden">
-                          <img
-                            src={report.urlToImage || "/document-preview.png"}
-                            alt={report.title}
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              e.target.src = "/document-preview.png";
-                            }}
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-2">
-                            <Badge variant="secondary" className="bg-orange-100 text-orange-700">
-                              TechCrunch
-                            </Badge>
-                            <ExternalLink className="h-4 w-4 text-slate-400" />
-                          </div>
-                          <h3 className="text-lg font-semibold text-slate-800 mb-2">
-                            {report.title}
-                          </h3>
-                          <p className="text-sm text-slate-600 line-clamp-2 mb-2">
-                            {report.description}
-                          </p>
-                          <div className="flex items-center text-xs text-slate-500">
-                            <Calendar className="h-3 w-3 mr-1" />
-                            {formatDate(report.publishedAt)}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {/* News Grid */}
+          {!loading && <NewsGrid />}
         </main>
-      </div>
-
-      {/* Right Sidebar - Current Deals & Funds News */}
-      <div className="w-80 border-l bg-white/80 backdrop-blur-sm p-6 overflow-auto">
-        <h2 className="mb-6 text-xl font-bold text-slate-800">
-          Latest Updates
-        </h2>
-
-        {!loading && !error && (
-          <div className="space-y-6">
-            {filteredNews.length === 0 ? (
-              <EmptyState 
-                message="No additional news available." 
-                icon={AlertCircle}
-              />
-            ) : (
-              <>
-                {(showAllNews ? filteredNews : filteredNews.slice(0, 4)).map((item, index) => {
-                  const lowerTitle = item.title.toLowerCase();
-                  const isFund = lowerTitle.includes("fund") || lowerTitle.includes("capital") || lowerTitle.includes("venture");
-                  const bgClass = isFund ? "bg-green-500" : "bg-blue-500";
-
-                  return (
-                    <div 
-                      key={index} 
-                      className="flex gap-4 p-4 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
-                      onClick={() => handleArticleClick(item.url)}
-                    >
-                      <div
-                        className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg ${bgClass}`}
-                      >
-                        {isFund ? (
-                          <Sparkles className="h-6 w-6 text-white" />
-                        ) : (
-                          <span className="text-sm font-semibold text-white">
-                            TC
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <Badge variant="secondary" className="bg-orange-100 text-orange-700 text-xs">
-                            TechCrunch
-                          </Badge>
-                          <ExternalLink className="h-3 w-3 text-slate-400" />
-                        </div>
-                        <h3 className="font-semibold text-slate-800 text-sm leading-tight mb-1">
-                          {item.title}
-                        </h3>
-                        <p className="text-xs text-slate-600 line-clamp-2">
-                          {item.description}
-                        </p>
-                        <div className="flex items-center text-xs text-slate-500 mt-1">
-                          <Calendar className="h-3 w-3 mr-1" />
-                          {formatDate(item.publishedAt)}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {filteredNews.length > 4 && (
-                  <Button 
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                    onClick={() => setShowAllNews(!showAllNews)}
-                  >
-                    {showAllNews ? "Show Less" : "View All News"}
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Emerging Themes */}
-        <div className="mt-8">
-          <h3 className="mb-4 text-lg font-bold text-slate-800">
-            Tech Trends
-          </h3>
-          <div className="space-y-3">
-            {[
-              "AI & Machine Learning",
-              "Startup Funding",
-              "Tech Innovation",
-              "Digital Transformation", 
-              "Future of Work",
-              "Emerging Technologies"
-            ].map((theme, index) => (
-              <Button 
-                key={index} 
-                variant="ghost" 
-                className="w-full justify-between hover:bg-slate-100 text-slate-700"
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-blue-500" />
-                  <span className="text-sm">{theme}</span>
-                </div>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
