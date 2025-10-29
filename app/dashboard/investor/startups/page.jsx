@@ -27,6 +27,7 @@ export default function Page() {
   const [Loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("Pitch Connect");
   const [deals, setDeals] = useState([]);
+  const [investorThesis, setInvestorThesis] = useState(null);
 
   useEffect(() => {
     fetchInvestorThesis();
@@ -57,7 +58,7 @@ export default function Page() {
       stage: 25,
       funding: 20,
       geography: 15,
-      keywords: 10
+      keywords: 10,
     };
 
     // Sector matching
@@ -77,7 +78,11 @@ export default function Page() {
     }
 
     // Funding range matching
-    if (investorThesis.checkSizeMin !== undefined && investorThesis.checkSizeMax !== undefined && startup.fundingRequirement) {
+    if (
+      investorThesis.checkSizeMin !== undefined &&
+      investorThesis.checkSizeMax !== undefined &&
+      startup.fundingRequirement
+    ) {
       const startupMin = startup.fundingRequirement.min || 0;
       const startupMax = startup.fundingRequirement.max || 0;
       const thesisMin = investorThesis.checkSizeMin;
@@ -91,31 +96,49 @@ export default function Page() {
     }
 
     // Geography matching (simplified - you might want to enhance this)
-    if (investorThesis.geographies && investorThesis.geographies.length > 0 && startup.location) {
+    if (
+      investorThesis.geographies &&
+      investorThesis.geographies.length > 0 &&
+      startup.location
+    ) {
       const startupLocation = startup.location.toLowerCase();
-      if (investorThesis.geographies.some(geo => startupLocation.includes(geo.toLowerCase()))) {
+      if (
+        investorThesis.geographies.some((geo) =>
+          startupLocation.includes(geo.toLowerCase())
+        )
+      ) {
         score += weights.geography;
       }
       totalWeight += weights.geography;
     }
 
     // Keyword matching
-    if (investorThesis.keywords && investorThesis.keywords.length > 0 && startup.description) {
+    if (
+      investorThesis.keywords &&
+      investorThesis.keywords.length > 0 &&
+      startup.description
+    ) {
       const description = startup.description.toLowerCase();
-      const matchedKeywords = investorThesis.keywords.filter(keyword => 
+      const matchedKeywords = investorThesis.keywords.filter((keyword) =>
         description.includes(keyword.toLowerCase())
       );
       if (matchedKeywords.length > 0) {
-        score += (matchedKeywords.length / investorThesis.keywords.length) * weights.keywords;
+        score +=
+          (matchedKeywords.length / investorThesis.keywords.length) *
+          weights.keywords;
       }
       totalWeight += weights.keywords;
     }
 
     // Excluded keywords penalty
-    if (investorThesis.excludedKeywords && investorThesis.excludedKeywords.length > 0 && startup.description) {
+    if (
+      investorThesis.excludedKeywords &&
+      investorThesis.excludedKeywords.length > 0 &&
+      startup.description
+    ) {
       const description = startup.description.toLowerCase();
-      const excludedMatches = investorThesis.excludedKeywords.filter(keyword =>
-        description.includes(keyword.toLowerCase())
+      const excludedMatches = investorThesis.excludedKeywords.filter(
+        (keyword) => description.includes(keyword.toLowerCase())
       );
       if (excludedMatches.length > 0) {
         score *= 0.7; // 30% penalty for excluded keywords
@@ -123,8 +146,9 @@ export default function Page() {
     }
 
     // Calculate final score as percentage
-    const finalScore = totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 80;
-    
+    const finalScore =
+      totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 80;
+
     // Ensure score is between 0-100
     return Math.min(100, Math.max(0, finalScore));
   };
@@ -133,13 +157,13 @@ export default function Page() {
     try {
       const res = await fetch("/api/investor/startups", { cache: "no-store" });
       const data = await res.json();
-      
+
       // Calculate relevancy scores for each startup
-      const startupsWithScores = data.map(startup => ({
+      const startupsWithScores = data.map((startup) => ({
         ...startup,
-        relevanceScore: calculateRelevancyScore(startup)
+        relevanceScore: calculateRelevancyScore(startup),
       }));
-      
+
       setStartups(startupsWithScores);
     } catch (err) {
       console.error("Error fetching startups:", err);
@@ -357,7 +381,7 @@ export default function Page() {
                   No deals found.
                 </div>
               )
-            ) : filteredStartups.length > 0 ? (
+            ) : activeTab === "Pitch Connect" && filteredStartups.length > 0 ? (
               <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm bg-white">
                 <table className="w-full border-collapse">
                   <thead className="bg-emerald-50/60 text-gray-600 text-sm">
@@ -384,90 +408,96 @@ export default function Page() {
                   </thead>
 
                   <tbody className="divide-y divide-gray-100 text-gray-700">
-                    {filteredStartups.map((startup) => (
-                      <tr
-                        key={startup._id}
-                        className="transition hover:bg-emerald-50/40"
-                      >
-                        <td className="text-sm px-6 py-4 font-medium">
-                          <p>{startup.name}</p>
-                          <Badge
-                            variant="secondary"
-                            className="mt-1 bg-primary/10 text-primary border-primary/20 font-medium"
-                          >
-                            {startup.sector}
-                          </Badge>
-                        </td>
-                        <td className="text-sm px-6 py-4">
-                          {startup.stage || "—"}
-                        </td>
-                        <td className="text-sm px-6 py-4 font-medium">Email</td>
-                        <td className="text-sm px-6 py-4 text-sm">
-                          <div className="flex items-center gap-3">
-                            <Progress
-                              value={startup?.relevanceScore || 80}
-                              className="h-2 w-24"
-                            />
-                            <span className="text-sm font-medium">
-                              {startup?.relevanceScore || 80}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          {startup.status === "submitted" && (
-                            <Badge className="bg-blue-100 text-blue-700">
-                              Submitted
+                    {filteredStartups.map((startup) => {
+                      console.log(startup);
+                      
+                      return (
+                        <tr
+                          key={startup._id}
+                          className="transition hover:bg-emerald-50/40"
+                        >
+                          <td className="text-sm px-6 py-4 font-medium">
+                            <p>{startup.name}</p>
+                            <Badge
+                              variant="secondary"
+                              className="mt-1 bg-primary/10 text-primary border-primary/20 font-medium"
+                            >
+                              {startup.sector}
                             </Badge>
-                          )}
-                          {startup.status === "contacted" && (
-                            <Badge className="bg-emerald-100 text-emerald-700">
-                              Contacted
-                            </Badge>
-                          )}
-                          {startup.status === "under_review" && (
-                            <Badge className="bg-yellow-100 text-yellow-700">
-                              Under Review
-                            </Badge>
-                          )}
-                          {startup.status === "rejected" && (
-                            <Badge className="bg-red-100 text-red-700">
-                              Rejected
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <Button
-                            variant="default"
-                            className="w-25 mr-2 text-xs bg-white hover:bg-emerald-600 text-dark hover:text-white border border-[#ccc] font-medium"
-                            onClick={() => {
-                              setEmailContent({
-                                to: startup.founderId,
-                                subject: `Regarding Investment Opportunity in ${startup.name}`,
-                                body: `Hi ${startup.name} Founder,\n\nI came across your startup and I'm interested in discussing potential investment opportunities.\n\nBest regards,\n[Your Name]`,
-                              });
-                              setIsEmailModalOpen(true);
-                              setSelectedStartup(startup);
-                            }}
-                            disabled={startup.status === "contacted"}
-                          >
-                            {startup.status === "contacted"
-                              ? "Mail Sent"
-                              : "Mail Founder"}
-                          </Button>
+                          </td>
+                          <td className="text-sm px-6 py-4">
+                            {startup.stage || "—"}
+                          </td>
+                          <td className="text-sm px-6 py-4 font-medium">
+                            Email
+                          </td>
+                          <td className="text-sm px-6 py-4 text-sm">
+                            <div className="flex items-center gap-3">
+                              <Progress
+                                value={startup?.relevanceScore || 80}
+                                className="h-2 w-24"
+                              />
+                              <span className="text-sm font-medium">
+                                {startup?.relevanceScore || 80}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            {startup.status === "submitted" && (
+                              <Badge className="bg-blue-100 text-blue-700">
+                                Submitted
+                              </Badge>
+                            )}
+                            {startup.status === "contacted" && (
+                              <Badge className="bg-emerald-100 text-emerald-700">
+                                Contacted
+                              </Badge>
+                            )}
+                            {startup.status === "under_review" && (
+                              <Badge className="bg-yellow-100 text-yellow-700">
+                                Under Review
+                              </Badge>
+                            )}
+                            {startup.status === "rejected" && (
+                              <Badge className="bg-red-100 text-red-700">
+                                Rejected
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <Button
+                              variant="default"
+                              className="w-25 mr-2 text-xs bg-white hover:bg-emerald-600 text-dark hover:text-white border border-[#ccc] font-medium"
+                              onClick={() => {
+                                setEmailContent({
+                                  to: startup.founderId,
+                                  subject: `Regarding Investment Opportunity in ${startup.name}`,
+                                  body: `Hi ${startup.name} Founder,\n\nI came across your startup and I'm interested in discussing potential investment opportunities.\n\nBest regards,\n[Your Name]`,
+                                });
+                                setIsEmailModalOpen(true);
+                                setSelectedStartup(startup);
+                              }}
+                              disabled={startup.status === "contacted"}
+                            >
+                              {startup.status === "contacted"
+                                ? "Mail Sent"
+                                : "Mail Founder"}
+                            </Button>
 
-                          <Button
-                            variant="default"
-                            className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                            onClick={() => {
-                              setSelectedStartup(startup);
-                              setIsModalOpen(true);
-                            }}
-                          >
-                            View Details
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
+                            <Button
+                              variant="default"
+                              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                              onClick={() => {
+                                setSelectedStartup(startup);
+                                setIsModalOpen(true);
+                              }}
+                            >
+                              View Details
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

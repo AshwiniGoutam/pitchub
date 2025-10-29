@@ -159,6 +159,8 @@ export default function InboxPage() {
     queryFn: () => fetchEmails(currentPage, emailsPerPage),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
+  // console.log("emailsData", emailsData);
+
 
   const emails = emailsData?.emails || [];
   const totalEmails = emailsData?.total || 0;
@@ -502,13 +504,12 @@ export default function InboxPage() {
     return (
       <div
         key={index}
-        className={`flex items-center justify-between p-3 border rounded-lg transition-all duration-200 ${
-          isDownloading
-            ? "bg-blue-50 border-blue-200"
-            : isDownloaded
+        className={`flex items-center justify-between p-3 border rounded-lg transition-all duration-200 ${isDownloading
+          ? "bg-blue-50 border-blue-200"
+          : isDownloaded
             ? "bg-green-50 border-green-200"
             : "hover:bg-gray-50 cursor-pointer"
-        }`}
+          }`}
         onClick={() =>
           !isDownloading &&
           downloadAttachment(attachment, selectedEmail?.subject || "")
@@ -577,16 +578,45 @@ export default function InboxPage() {
   const showLoading =
     emailsLoading || (emails.length > 0 && sectorsLoading) || thesisLoading;
 
-  if (showLoading) {
+  // if (showLoading) {
+  //   return (
+  //     <div className="flex h-screen">
+  //       <InvestorSidebar />
+  //       <div className="flex-1 flex items-center justify-center">
+  //         <div className="text-center">
+  //           <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
+  //           <p className="text-muted-foreground text-lg">
+  //             {emailsLoading ? "Loading emails..." : "Analyzing sectors..."}
+  //           </p>
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
+
+  if (emailsError) {
     return (
       <div className="flex h-screen">
         <InvestorSidebar />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
-            <p className="text-muted-foreground text-lg">
-              {emailsLoading ? "Loading emails..." : "Analyzing sectors..."}
+            <p className="text-red-600 text-lg font-semibold">
+              Error loading emails
             </p>
+            <p className="text-gray-600 text-sm mt-2">
+              {emailsError?.message || "Something went wrong. Please try again."}
+            </p>
+
+            {/* Optional: show more details if it's a server error */}
+            {emailsError?.response?.data?.message && (
+              <p className="text-gray-500 text-sm mt-1">
+                Details: {emailsError.response.data.message}
+              </p>
+            )}
+
+            <Button onClick={() => window.location.reload()} className="mt-4">
+              Retry
+            </Button>
           </div>
         </div>
       </div>
@@ -657,9 +687,8 @@ export default function InboxPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Inbox List - Fixed width that doesn't shrink */}
         <div
-          className={`${
-            selectedEmail ? "w-2/3" : "w-full"
-          } overflow-auto border-r bg-white transition-all`}
+          className={`${selectedEmail ? "w-2/3" : "w-full"
+            } overflow-auto border-r bg-white transition-all`}
         >
           {/* Header */}
           <header className="sticky top-0 z-10 border-b bg-white">
@@ -703,15 +732,13 @@ export default function InboxPage() {
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {filteredEmails.map((email) => {
                     const relevanceScore = calculateRelevanceScore(email);
-
                     return (
                       <tr
                         key={email.id}
                         onClick={() => handleEmailSelect(email)}
                         onDoubleClick={() => handleEmailDoubleClick(email)}
-                        className={`cursor-pointer transition-colors hover:bg-gray-50 ${
-                          selectedEmail?.id === email.id ? "bg-emerald-50" : ""
-                        }`}
+                        className={`cursor-pointer transition-colors hover:bg-gray-50 ${selectedEmail?.id === email.id ? "bg-emerald-50" : ""
+                          }`}
                       >
                         <td className="px-4 py-4 text-sm font-medium text-gray-900 whitespace-nowrap truncate max-w-[200px]">
                           {email.from}
@@ -742,17 +769,16 @@ export default function InboxPage() {
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap">
                           <Badge
-                            className={`${
-                              email?.status == "Contacted"
-                                ? "bg-blue-100 text-blue-700"
-                                : email?.status == "Under Evaluation"
+                            className={`${email?.status == "Contacted"
+                              ? "bg-blue-100 text-blue-700"
+                              : email?.status == "Under Evaluation"
                                 ? "bg-yellow-100 text-yellow-700"
                                 : email?.status == "Pending"
-                                ? "bg-red-100 text-red-700"
-                                : email?.status == "New"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : ""
-                            }`}
+                                  ? "bg-red-100 text-red-700"
+                                  : email?.status == "New"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : ""
+                              }`}
                           >
                             {email.status}
                           </Badge>
@@ -891,17 +917,16 @@ export default function InboxPage() {
                         Accept
                       </Button> */}
                       <Button
-                        className={`flex-1 cursor-pointer ${
-                          acceptedEmails.has(selectedEmail.id)
-                            ? "bg-green-600 hover:bg-green-700"
-                            : "bg-emerald-600 hover:bg-emerald-700"
-                        }`}
+                        className={`flex-1 cursor-pointer ${selectedEmail?.accepted
+                          ? "bg-green-600 hover:bg-green-700"
+                          : "bg-emerald-600 hover:bg-emerald-700"
+                          }`}
                         onClick={() => acceptPitch(selectedEmail.id)}
                         disabled={
-                          acceptedEmails.has(selectedEmail.id) || AccepingMail
+                          selectedEmail?.accepted || AccepingMail
                         }
                       >
-                        {acceptedEmails.has(selectedEmail.id)
+                        {selectedEmail?.accepted
                           ? "Accepted"
                           : "Accept"}
                       </Button>
@@ -948,19 +973,18 @@ export default function InboxPage() {
                                 className="flex items-start gap-2"
                               >
                                 <div
-                                  className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-                                    point.toLowerCase().includes("advantage") ||
+                                  className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${point.toLowerCase().includes("advantage") ||
                                     point.toLowerCase().includes("strength")
-                                      ? "bg-green-500"
-                                      : point
-                                          .toLowerCase()
-                                          .includes("weakness") ||
-                                        point
-                                          .toLowerCase()
-                                          .includes("challenge")
+                                    ? "bg-green-500"
+                                    : point
+                                      .toLowerCase()
+                                      .includes("weakness") ||
+                                      point
+                                        .toLowerCase()
+                                        .includes("challenge")
                                       ? "bg-red-500"
                                       : "bg-blue-500"
-                                  }`}
+                                    }`}
                                 />
                                 <span className="text-sm text-gray-700">
                                   {point}
@@ -1054,7 +1078,7 @@ export default function InboxPage() {
             </DialogHeader>
 
             {selectedEmail?.attachments &&
-            selectedEmail.attachments.length > 0 ? (
+              selectedEmail.attachments.length > 0 ? (
               <>
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {selectedEmail.attachments.map((attachment, index) => (
