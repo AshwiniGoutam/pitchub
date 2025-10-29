@@ -254,6 +254,7 @@ const getThesisMatchedArticles = (articles, investorThesis) => {
   });
 };
 
+
 export default function MarketResearchPage() {
   const [allNews, setAllNews] = useState([]);
   const [categorizedNews, setCategorizedNews] = useState([]);
