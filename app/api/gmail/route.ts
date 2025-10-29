@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]/route";
+import { getDatabase } from "@/lib/mongodb";
 
 // ------------------ Utils ------------------
 
@@ -36,7 +37,7 @@ function extractBody(payload) {
 // Function to extract attachments
 function extractAttachments(payload, messageId) {
   const attachments = [];
-  
+
   function processPart(part, path = '') {
     if (part.filename && part.filename.length > 0 && part.body?.attachmentId) {
       attachments.push({
@@ -47,16 +48,16 @@ function extractAttachments(payload, messageId) {
         url: `/api/gmail/attachments/${messageId}/${part.body.attachmentId}`
       });
     }
-    
+
     if (part.parts) {
       part.parts.forEach((p, index) => processPart(p, `${path}.parts[${index}]`));
     }
   }
-  
+
   if (payload.parts) {
     payload.parts.forEach((part, index) => processPart(part, `parts[${index}]`));
   }
-  
+
   return attachments;
 }
 
@@ -174,95 +175,73 @@ function computeRelevance(email, thesis) {
 export async function GET(request) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
-    return new Response(JSON.stringify({ error: "Not authenticated" }), {
-      status: 401,
-    });
+    return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
 
   try {
-    // Parse query parameters for pagination
+    const db = await getDatabase();
+    const emailsCollection = db.collection("gmail_emails");
+    const acceptedCollection = db.collection("accepted_pitches");
+
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
     const offset = (page - 1) * limit;
 
-    // 🔹 Step 1: Fetch investor thesis
-    let thesis = {
-      sectors: [],
-      keywords: [],
-      excludedKeywords: [],
-      geographies: [],
-    };
+    // Step 1: Fetch investor thesis
+    let thesis = { sectors: [], keywords: [], excludedKeywords: [], geographies: [] };
     try {
-      const thesisRes = await fetch(
-        `${
-          process.env.NEXTAUTH_URL || "http://localhost:3000"
-        }/api/investor/thesis`,
-        { headers: { Authorization: `Bearer ${session.accessToken}` } }
-      );
-
-      if (thesisRes.ok) {
-        thesis = await thesisRes.json();
-      } else {
-        console.warn("⚠️ Thesis fetch failed, using default");
-      }
+      const thesisRes = await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/investor/thesis`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (thesisRes.ok) thesis = await thesisRes.json();
     } catch (err) {
-      console.warn("⚠️ Error fetching thesis:", err);
+      console.warn("⚠️ Thesis fetch failed, using default:", err);
     }
 
-    // 🔹 Step 2: Fetch Gmail messages (last 3 months) with pagination
-    const query =
-      "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
-    
-    // First, get total count
+    // Step 2: Fetch Gmail messages (90 days)
+    const query = "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
     const listRes = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
-        query
-      )}`,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}`,
       { headers: { Authorization: `Bearer ${session.accessToken}` } }
     );
 
     if (!listRes.ok) {
       const text = await listRes.text();
       console.error("Gmail list fetch error:", text);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch Gmail list" }),
-        { status: 502 }
-      );
+      return new Response(JSON.stringify({ error: "Failed to fetch Gmail list" }), { status: 502 });
     }
 
     const listData = await listRes.json();
-    const totalMessages = listData.messages?.length || 0;
-    
-    if (!listData.messages) {
-      return new Response(JSON.stringify({ emails: [], total: 0 }), { status: 200 });
-    }
+    const allMessages = listData.messages || [];
 
-    // Apply pagination
-    const paginatedMessages = listData.messages.slice(offset, offset + limit);
+    const paginatedMessages = allMessages.slice(offset, offset + limit);
+    const gmailIds = paginatedMessages.map((m) => m.id);
 
-    // 🔹 Step 3: Process only the paginated emails
-    const emails = await Promise.all(
-      paginatedMessages.map(async (msg) => {
+    // ✅ Get accepted emails for this user in one query
+    const accepted = await acceptedCollection
+      .find({ userEmail: session.user.email, emailId: { $in: gmailIds } })
+      .toArray();
+    const acceptedIds = new Set(accepted.map((a) => a.emailId));
+
+    const processedEmails = [];
+
+    for (const msg of paginatedMessages) {
+      let existing = await emailsCollection.findOne({ gmailId: msg.id });
+
+      if (!existing) {
         const detailRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
           { headers: { Authorization: `Bearer ${session.accessToken}` } }
         );
+        if (!detailRes.ok) continue;
 
-        if (!detailRes.ok) return null;
         const detail = await detailRes.json();
-
         const headers = detail.payload?.headers || [];
-        const subject =
-          headers.find((h) => h.name === "Subject")?.value ||
-          "(no subject)";
-        const fromHeader =
-          headers.find((h) => h.name === "From")?.value ||
-          "(unknown sender)";
+        const subject = headers.find((h) => h.name === "Subject")?.value || "(no subject)";
+        const fromHeader = headers.find((h) => h.name === "From")?.value || "(unknown sender)";
         const date = headers.find((h) => h.name === "Date")?.value || "";
         const body = extractBody(detail.payload);
-        
-        // Extract attachments
         const attachments = extractAttachments(detail.payload, msg.id);
 
         let from = fromHeader;
@@ -273,16 +252,12 @@ export async function GET(request) {
           fromEmail = match[2].trim();
         }
 
-        // 🔍 Detect sector automatically
         const sector = detectSector(fromEmail, subject, body);
         const status = defaultStatus(sector);
-        const relevanceScore = computeRelevance(
-          { subject, content: body, sector },
-          thesis
-        );
+        const relevanceScore = computeRelevance({ subject, content: body, sector }, thesis);
 
-        return {
-          id: msg.id,
+        existing = {
+          gmailId: msg.id,
           from,
           fromEmail,
           subject,
@@ -292,28 +267,46 @@ export async function GET(request) {
           timestamp: new Date(date).toISOString(),
           content: body,
           attachments,
-          isRead: detail.labelIds?.includes('UNREAD') ? false : true,
-          isStarred: detail.labelIds?.includes('STARRED') || false,
+          isRead: !detail.labelIds?.includes("UNREAD"),
+          isStarred: detail.labelIds?.includes("STARRED") || false,
+          createdAt: new Date(),
         };
-      })
+
+        await emailsCollection.updateOne(
+          { gmailId: msg.id },
+          { $set: existing },
+          { upsert: true }
+        );
+      }
+
+      // ✅ mark accepted
+      existing.accepted = acceptedIds.has(existing.gmailId);
+
+      processedEmails.push(existing);
+    }
+
+    // Step 5: Sort by relevance
+    const sorted = processedEmails.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+    // return new Response(
+    //   JSON.stringify({ emails: sorted, total: allMessages.length, page, limit }),
+    //   { status: 200 }
+    // );
+    // remove _id and rename gmailId -> id for frontend clarity
+    const sanitized = sorted.map(e => ({
+      ...e,
+      id: e.gmailId,   // ✅ React will use this
+      _id: undefined,  // ❌ hide Mongo _id
+      gmailId: undefined
+    }));
+
+    return new Response(
+      JSON.stringify({ emails: sanitized, total: allMessages.length, page, limit }),
+      { status: 200 }
     );
 
-    // 🔹 Step 4: Filter and sort
-    const filtered = emails
-      .filter((e) => e && e.sector !== "General")
-      .sort((a, b) => b.relevanceScore - a.relevanceScore);
-
-    return new Response(JSON.stringify({ 
-      emails: filtered, 
-      total: totalMessages,
-      page,
-      limit 
-    }), { status: 200 });
   } catch (err) {
     console.error("🔥 Gmail API error:", err);
-    return new Response(
-      JSON.stringify({ error: err.message || "Internal server error" }),
-      { status: 500 }
-    );
+    return new Response(JSON.stringify({ error: err.message || "Internal server error" }), { status: 500 });
   }
 }
