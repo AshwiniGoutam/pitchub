@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { InvestorSidebar } from "@/components/investor-sidebar";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   PieChart,
   Pie,
@@ -40,72 +41,203 @@ interface Startup {
   description: string;
 }
 
-export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalPitches: 0,
-    newThisWeek: 0,
-    underReview: 0,
-    contacted: 0,
+interface Email {
+  id: string;
+  from: string;
+  fromEmail: string;
+  subject: string;
+  content: string;
+  timestamp: string;
+  isRead: boolean;
+  isStarred: boolean;
+  status: string;
+  attachments: any[];
+  startup?: any;
+}
+
+interface SectorResult {
+  emailId: string;
+  sector: string;
+}
+
+// Color palette for sectors
+const COLORS = ["#10B981", "#3B82F6", "#EAB308", "#EF4444", "#8B5CF6", "#F59E0B", "#EC4899"];
+
+// Fetch emails from your Gmail API
+const fetchEmails = async (): Promise<Email[]> => {
+  const res = await fetch("/api/gmail?limit=100");
+  if (!res.ok) throw new Error("Failed to fetch emails");
+  const data = await res.json();
+  return data.emails || [];
+};
+
+// Predict sectors for emails
+const predictSectors = async (emails: Email[]): Promise<{ sectors: SectorResult[] }> => {
+  const res = await fetch("/api/predict-sectors", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ emails }),
   });
-  const [startups, setStartups] = useState<Startup[]>([]);
-  const [filteredStartups, setFilteredStartups] = useState<Startup[]>([]);
+  if (!res.ok) throw new Error("Failed to predict sectors");
+  return res.json();
+};
+
+// Fetch dashboard stats
+const fetchDashboardStats = async (): Promise<DashboardStats> => {
+  const res = await fetch("/api/investor/stats");
+  if (!res.ok) throw new Error("Failed to fetch stats");
+  return res.json();
+};
+
+// Fetch startups
+const fetchStartups = async (): Promise<Startup[]> => {
+  const res = await fetch("/api/investor/startups");
+  if (!res.ok) throw new Error("Failed to fetch startups");
+  return res.json();
+};
+
+// Main sector data fetcher
+const fetchSectorData = async () => {
+  console.log("🔍 Fetching sector data...");
+  
+  // Step 1: Fetch emails
+  const emails = await fetchEmails();
+  console.log(`📧 Found ${emails.length} emails`);
+  
+  if (emails.length === 0) {
+    return { sectors: [], totalEmails: 0 };
+  }
+
+  // Step 2: Predict sectors
+  const sectorsResponse = await predictSectors(emails);
+  console.log("🎯 Sector predictions:", sectorsResponse);
+
+  // Step 3: Calculate sector distribution
+  const sectorCounts = {};
+  let totalAnalyzed = 0;
+
+  sectorsResponse.sectors?.forEach(prediction => {
+    const sector = prediction.sector || 'Unknown';
+    if (sector && sector !== 'Other' && sector !== 'Unknown') {
+      sectorCounts[sector] = (sectorCounts[sector] || 0) + 1;
+      totalAnalyzed++;
+    }
+  });
+
+  // Convert to chart data format with percentages
+  const sectorData = Object.entries(sectorCounts).map(([name, value]) => ({
+    name: name,
+    value: value,
+    percentage: totalAnalyzed > 0 ? Math.round((value / totalAnalyzed) * 100) : 0
+  })).sort((a, b) => b.value - a.value);
+
+  console.log("📊 Final sector data:", sectorData);
+  return {
+    sectors: sectorData,
+    totalEmails: emails.length,
+    analyzedEmails: totalAnalyzed
+  };
+};
+
+export default function DashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sectorFilter, setSectorFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
-  const [isLoading, setIsLoading] = useState(true);
+  const [filteredStartups, setFilteredStartups] = useState<Startup[]>([]);
+
+  // Use React Query for all data fetching with caching
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: fetchDashboardStats,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  const { data: startups, isLoading: startupsLoading } = useQuery({
+    queryKey: ['startups'],
+    queryFn: fetchStartups,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  const { 
+    data: sectorData, 
+    isLoading: sectorLoading, 
+    error: sectorError,
+    refetch: refetchSectors 
+  } = useQuery({
+    queryKey: ['sector-data'],
+    queryFn: fetchSectorData,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    gcTime: 15 * 60 * 1000, // 15 minutes cache
+    retry: 2,
+  });
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    if (startups) {
+      let filtered = startups;
 
-  useEffect(() => {
-    filterStartups();
+      if (searchTerm) {
+        filtered = filtered.filter(
+          (startup) =>
+            startup.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            startup.description.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      }
+
+      if (sectorFilter !== "all") {
+        filtered = filtered.filter((startup) => startup.sector === sectorFilter);
+      }
+
+      if (stageFilter !== "all") {
+        filtered = filtered.filter((startup) => startup.stage === stageFilter);
+      }
+
+      setFilteredStartups(filtered);
+    }
   }, [startups, searchTerm, sectorFilter, stageFilter]);
 
-  const fetchDashboardData = async () => {
-    try {
-      const [statsResponse, startupsResponse] = await Promise.all([
-        fetch("/api/investor/stats"),
-        fetch("/api/investor/startups"),
-      ]);
-
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats(statsData);
-      }
-
-      if (startupsResponse.ok) {
-        const startupsData = await startupsResponse.json();
-        setStartups(startupsData);
-      }
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const filterStartups = () => {
-    let filtered = startups;
-
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (startup) =>
-          startup.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          startup.description.toLowerCase().includes(searchTerm.toLowerCase())
+  // Custom tooltip
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-3 border rounded-lg shadow-lg">
+          <p className="font-bold">{data.name}</p>
+          <p className="text-sm">{data.value} emails ({data.percentage}%)</p>
+        </div>
       );
     }
-
-    if (sectorFilter !== "all") {
-      filtered = filtered.filter((startup) => startup.sector === sectorFilter);
-    }
-
-    if (stageFilter !== "all") {
-      filtered = filtered.filter((startup) => startup.stage === stageFilter);
-    }
-
-    setFilteredStartups(filtered);
+    return null;
   };
+
+  // Custom label for pie chart
+  const renderCustomizedLabel = ({
+    cx, cy, midAngle, innerRadius, outerRadius, percent
+  }) => {
+    if (percent < 0.05) return null;
+    
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <text 
+        x={x} 
+        y={y} 
+        fill="white" 
+        textAnchor={x > cx ? 'start' : 'end'} 
+        dominantBaseline="central"
+        fontSize={11}
+        fontWeight="bold"
+      >
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
+  };
+
+  const isLoading = statsLoading || startupsLoading || sectorLoading;
 
   if (isLoading) {
     return (
@@ -115,21 +247,34 @@ export default function DashboardPage() {
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
             <p className="text-muted-foreground text-lg">
-              Loading your dashboard...
+              {sectorLoading ? "Analyzing email sectors..." : "Loading your dashboard..."}
             </p>
+            {sectorLoading && (
+              <p className="text-sm text-gray-500 mt-2">
+                Analyzing your emails to build sector distribution...
+              </p>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
-  const data = [
-    { name: "FinTech", value: 35 },
-    { name: "HealthTech", value: 30 },
-    { name: "SaaS", value: 20 },
-    { name: "DeepTech", value: 15 },
-  ];
-  const COLORS = ["#10B981", "#3B82F6", "#EAB308", "#EF4444"];
+  if (sectorError) {
+    return (
+      <div className="flex h-screen">
+        <InvestorSidebar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-red-600 text-lg mb-4">Error loading sector data</p>
+            <Button onClick={() => refetchSectors()} className="mt-4">
+              Retry Analysis
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -148,14 +293,20 @@ export default function DashboardPage() {
               <Button variant="ghost" size="icon">
                 <Bell className="h-5 w-5" />
               </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => refetchSectors()}
+                disabled={sectorLoading}
+              >
+                {sectorLoading ? "Refreshing..." : "Refresh Data"}
+              </Button>
             </div>
           </div>
         </header>
 
         {/* Main Content */}
         <main className="p-8">
-          {/* <p className="mb-8 text-gray-600">Here's your quality deal snapshot.</p> */}
-
           <div className="grid gap-6 lg:grid-cols-12">
             {/* Summary - col-span-3 */}
             <Card className="lg:col-span-5">
@@ -165,7 +316,7 @@ export default function DashboardPage() {
               <CardContent className="space-y-6">
                 <div>
                   <p className="text-sm text-gray-500">Total Pitches</p>
-                  <p className="text-4xl font-bold">{stats.totalPitches}</p>
+                  <p className="text-4xl font-bold">{stats?.totalPitches || 0}</p>
                 </div>
 
                 <div>
@@ -193,12 +344,12 @@ export default function DashboardPage() {
 
                 <div>
                   <p className="text-sm text-gray-500">Reviewed</p>
-                  <p className="text-4xl font-bold">{stats.underReview}</p>
+                  <p className="text-4xl font-bold">{stats?.underReview || 0}</p>
                 </div>
 
                 <div>
                   <p className="text-sm text-gray-500">Contacted</p>
-                  <p className="text-4xl font-bold">{stats.contacted}</p>
+                  <p className="text-4xl font-bold">{stats?.contacted || 0}</p>
                 </div>
               </CardContent>
             </Card>
@@ -206,34 +357,62 @@ export default function DashboardPage() {
             {/* Deal Flow by Sector - col-span-9 */}
             <Card className="lg:col-span-7 w-full">
               <CardHeader>
-                <CardTitle>Deal Flow by Sector</CardTitle>
+                <CardTitle>
+                  Deal Flow by Sector
+                  {sectorData?.sectors && sectorData.sectors.length > 0 && (
+                    <span className="text-sm font-normal text-gray-500 ml-2">
+                      ({sectorData.analyzedEmails} emails analyzed)
+                    </span>
+                  )}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-100">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={data}
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={110}
-                        dataKey="value"
-                        nameKey="name"
-                        label={({ name, percent }) =>
-                          `${name} ${(percent * 100).toFixed(0)}%`
+                  {sectorData?.sectors && sectorData.sectors.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={400}>
+                      <PieChart>
+                        <Pie
+                          data={sectorData.sectors}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={140}
+                          innerRadius={70}
+                          dataKey="value"
+                          nameKey="name"
+                          label={renderCustomizedLabel}
+                          labelLine={false}
+                        >
+                          {sectorData.sectors.map((entry, index) => (
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={COLORS[index % COLORS.length]} 
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend 
+                          formatter={(value, entry, index) => (
+                            <span style={{ color: entry.color, fontSize: '12px' }}>
+                              {sectorData.sectors[index]?.name} ({sectorData.sectors[index]?.value})
+                            </span>
+                          )}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                      <div className="text-lg mb-2">No Email Data</div>
+                      <div className="text-sm text-center mb-4">
+                        {sectorData?.totalEmails > 0 
+                          ? `Found ${sectorData.totalEmails} emails but couldn't analyze sectors`
+                          : "No pitch emails found in your inbox"
                         }
-                      >
-                        {data.map((entry, index) => (
-                          <Cell
-                            key={index}
-                            fill={COLORS[index % COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
+                      </div>
+                      <Button onClick={() => refetchSectors()} variant="outline">
+                        Retry Analysis
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
