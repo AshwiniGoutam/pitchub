@@ -13,8 +13,10 @@ import {
 import { Download, Mail } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import ConnectionFilterDropdown from "@/components/ui/ConnectionFilterDropdown";
+import { useRouter } from "next/navigation";
 
 export default function Page() {
+  const router = useRouter();
   const [startups, setStartups] = useState([]);
   const [selectedStartup, setSelectedStartup] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -25,7 +27,7 @@ export default function Page() {
     body: "",
   });
   const [Loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("Pitch Connect");
+  const [activeTab, setActiveTab] = useState("Deals");
   const [deals, setDeals] = useState([]);
   const [investorThesis, setInvestorThesis] = useState(null);
   const [debugInfo, setDebugInfo] = useState("");
@@ -318,20 +320,7 @@ export default function Page() {
         return;
       }
 
-      await fetch(`/api/investor/startups/${selectedStartup?._id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "contacted" }),
-      });
-
-      // 3️⃣ Update UI locally
-      setStartups((prev) =>
-        prev.map((s) =>
-          s._id === selectedStartup?._id ? { ...s, status: "contacted" } : s
-        )
-      );
-
-      // 4️⃣ Reset states
+      //  Reset states
       setLoading(false);
       setIsEmailModalOpen(false);
     } catch (err) {
@@ -348,6 +337,13 @@ export default function Page() {
     if (activeTab === "Archived") return s.status === "rejected";
     return true;
   });
+
+  const InfoRow = ({ label, value }) => (
+    <div className="flex items-center">
+      <span className="font-semibold text-gray-600 w-40">{label}:</span>
+      <span className="text-gray-700">{value}</span>
+    </div>
+  );
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -367,32 +363,6 @@ export default function Page() {
         </header>
 
         <div className="p-8 max-w-7xl mx-auto">
-          <div className="flex items-center justify-between">
-            {/* Tabs */}
-            <div className="flex space-x-8 text-gray-600 font-medium">
-              {["Deals", "Pitch Connect"].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`cursor-pointer pb-2 border-b-2 transition ${
-                    activeTab === tab
-                      ? "text-emerald-600 border-emerald-600"
-                      : "border-transparent hover:text-emerald-600"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-
-            {/* Filter Dropdown */}
-            <ConnectionFilterDropdown
-              onChange={(value) => {
-                console.log("Selected connection type:", value);
-              }}
-            />
-          </div>
-
           <div className="py-8">
             {activeTab === "Deals" ? (
               deals.length > 0 ? (
@@ -402,6 +372,9 @@ export default function Page() {
                       <tr>
                         <th className="px-6 py-3 text-left font-semibold">
                           From
+                        </th>
+                        <th className="px-6 py-3 text-left font-semibold">
+                          Sector
                         </th>
                         <th className="px-6 py-3 text-left font-semibold">
                           Summary
@@ -416,12 +389,18 @@ export default function Page() {
                         <tr
                           key={deal.emailId}
                           className="transition hover:bg-emerald-50/40"
+                          onDoubleClick={() =>
+                            router.push(`/dashboard/investor/startups/${deal._id}`)
+                          }
                         >
                           <td className="text-sm px-6 py-4">{deal.from}</td>
-                          <td className="text-sm px-6 py-4 font-medium">
-                            {deal.summary}
+                          <td className="text-sm px-6 py-4">
+                            <p className="line-clamp-2">{deal.sector}</p>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="text-sm px-6 py-4 font-medium">
+                            <p className="line-clamp-2">{deal.summary}</p>
+                          </td>
+                          <td className="px-6 py-4 flex items-center justify-center">
                             <Button
                               variant="default"
                               className="w-25 mr-2 text-xs bg-white hover:bg-emerald-600 text-dark hover:text-white border border-[#ccc] font-medium"
@@ -437,6 +416,16 @@ export default function Page() {
                             >
                               Mail Founder
                             </Button>
+                            <Button
+                              variant="default"
+                              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                              onClick={() => {
+                                setSelectedStartup(deal);
+                                setIsModalOpen(true);
+                              }}
+                            >
+                              View Details
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -448,130 +437,8 @@ export default function Page() {
                   No deals found.
                 </div>
               )
-            ) : activeTab === "Pitch Connect" && filteredStartups.length > 0 ? (
-              <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm bg-white">
-                <table className="w-full border-collapse">
-                  <thead className="bg-emerald-50/60 text-gray-600 text-sm">
-                    <tr>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Company
-                      </th>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Stage
-                      </th>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Connection Type
-                      </th>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Relevancy Score
-                      </th>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="divide-y divide-gray-100 text-gray-700">
-                    {filteredStartups.map((startup) => {
-                      console.log("Rendering startup:", startup.name, "Score:", startup.relevanceScore);
-                      
-                      return (
-                        <tr
-                          key={startup._id}
-                          className="transition hover:bg-emerald-50/40"
-                        >
-                          <td className="text-sm px-6 py-4 font-medium">
-                            <p>{startup.name}</p>
-                            <Badge
-                              variant="secondary"
-                              className="mt-1 bg-primary/10 text-primary border-primary/20 font-medium"
-                            >
-                              {startup.sector}
-                            </Badge>
-                          </td>
-                          <td className="text-sm px-6 py-4">
-                            {startup.stage || "—"}
-                          </td>
-                          <td className="text-sm px-6 py-4 font-medium">
-                            Email
-                          </td>
-                          <td className="text-sm px-6 py-4 text-sm">
-                            <div className="flex items-center gap-3">
-                              <Progress
-                                value={startup?.relevanceScore || 50}
-                                className="h-2 w-24"
-                              />
-                              <span className="text-sm font-medium">
-                                {startup?.relevanceScore || 50}%
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            {startup.status === "submitted" && (
-                              <Badge className="bg-blue-100 text-blue-700">
-                                Submitted
-                              </Badge>
-                            )}
-                            {startup.status === "contacted" && (
-                              <Badge className="bg-emerald-100 text-emerald-700">
-                                Contacted
-                              </Badge>
-                            )}
-                            {startup.status === "under_review" && (
-                              <Badge className="bg-yellow-100 text-yellow-700">
-                                Under Review
-                              </Badge>
-                            )}
-                            {startup.status === "rejected" && (
-                              <Badge className="bg-red-100 text-red-700">
-                                Rejected
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <Button
-                              variant="default"
-                              className="w-25 mr-2 text-xs bg-white hover:bg-emerald-600 text-dark hover:text-white border border-[#ccc] font-medium"
-                              onClick={() => {
-                                setEmailContent({
-                                  to: startup.founderId,
-                                  subject: `Regarding Investment Opportunity in ${startup.name}`,
-                                  body: `Hi ${startup.name} Founder,\n\nI came across your startup and I'm interested in discussing potential investment opportunities.\n\nBest regards,\n[Your Name]`,
-                                });
-                                setIsEmailModalOpen(true);
-                                setSelectedStartup(startup);
-                              }}
-                              disabled={startup.status === "contacted"}
-                            >
-                              {startup.status === "contacted"
-                                ? "Mail Sent"
-                                : "Mail Founder"}
-                            </Button>
-
-                            <Button
-                              variant="default"
-                              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                              onClick={() => {
-                                setSelectedStartup(startup);
-                                setIsModalOpen(true);
-                              }}
-                            >
-                              View Details
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
             ) : (
-              <div className="py-16 text-center text-gray-500 font-medium">
-                No startups found for {activeTab}.
-              </div>
+              ""
             )}
           </div>
         </div>
@@ -582,88 +449,101 @@ export default function Page() {
         <DialogContent className="max-w-6xl w-full max-h-[90vh] overflow-y-auto p-8 bg-white rounded shadow-2xl">
           {selectedStartup && (
             <>
-              <DialogHeader className="border-b pb-4 gap-0">
-                <DialogTitle className="text-xl font-bold text-gray-900">
-                  {selectedStartup.name}
+              <DialogHeader className="border-b pb-3">
+                <DialogTitle className="text-2xl font-semibold text-gray-900">
+                  {selectedStartup.from}
                 </DialogTitle>
-                <DialogDescription className="text-sm text-gray-600">
-                  {selectedStartup.sector} • {selectedStartup.stage}
+                <DialogDescription className="text-sm text-gray-500 mt-1">
+                  {selectedStartup.sector} • {selectedStartup.growthStage}
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="grid grid-cols-1 gap-8 mt-6 text-gray-700">
-                <div className="space-y-4">
-                  <p>
-                    <span className="font-semibold">Location:</span>{" "}
-                    {selectedStartup.location || "—"}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Team Size:</span>{" "}
-                    {selectedStartup.teamSize || "—"}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Funding Requirement:</span>{" "}
-                    ₹{selectedStartup.fundingRequirement?.min?.toLocaleString()}{" "}
-                    – ₹
-                    {selectedStartup.fundingRequirement?.max?.toLocaleString()}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Founder Email:</span>{" "}
-                    {selectedStartup.founderId}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Relevance Score:</span>{" "}
-                    {selectedStartup.relevanceScore}%
-                  </p>
-                  <p>
-                    <span className="font-semibold">Status:</span>{" "}
-                    <Badge className="ml-1 bg-blue-100 text-blue-700 capitalize">
-                      {selectedStartup.status}
-                    </Badge>
-                  </p>
-                </div>
-
+              <div className="grid grid-cols-1 md:grid-cols-1 gap-8 mt-0 text-gray-700">
                 <div>
-                  <p className="font-semibold mb-1 text-lg">Description:</p>
-                  <p className="text-gray-600 leading-relaxed text-sm">
-                    {selectedStartup.description}
+                  <p className="font-semibold mb-2 text-gray-900 text-base">
+                    Sector
                   </p>
+                  <p className="text-gray-600 leading-relaxed text-sm bg-gray-50 rounded p-3 mb-3">
+                    {selectedStartup.sector}
+                  </p>
+
+                  <p className="font-semibold mb-2 text-gray-900 text-base">
+                    Summary
+                  </p>
+                  <p className="text-gray-600 leading-relaxed text-sm bg-gray-50 rounded p-3">
+                    {selectedStartup.summary}
+                  </p>
+
+                  {selectedStartup.marketResearch && (
+                    <>
+                      <p className="font-semibold mb-2 mt-5 text-gray-900 text-base">
+                        Market Research
+                      </p>
+                      <p className="text-gray-600 leading-relaxed text-sm bg-gray-50 rounded p-3">
+                        {selectedStartup.marketResearch}
+                      </p>
+                    </>
+                  )}
+
+                  {selectedStartup.competitiveAnalysis?.length > 0 && (
+                    <>
+                      <p className="font-semibold mb-2 mt-5 text-gray-900 text-base">
+                        Competitive Analysis
+                      </p>
+                      <ul className="text-gray-600 text-sm space-y-2 list-disc list-inside bg-gray-50 rounded p-3">
+                        {selectedStartup.competitiveAnalysis.map((point, i) => (
+                          <li key={i}>{point}</li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
                 </div>
               </div>
 
-              <div className="pt-6 mt-6 text-sm text-gray-500 border-t">
-                <p>
-                  Created:{" "}
-                  {new Date(selectedStartup.createdAt).toLocaleString("en-IN")}
-                </p>
-                <p>
-                  Updated:{" "}
-                  {new Date(selectedStartup.updatedAt).toLocaleString("en-IN")}
-                </p>
-              </div>
+              {/* Footer Section */}
+              <div className="pt-5 mt-6 text-xs text-gray-500 border-t flex flex-col md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p>
+                    Created:{" "}
+                    {new Date(selectedStartup.createdAt).toLocaleString(
+                      "en-IN"
+                    )}
+                  </p>
+                  {selectedStartup.updatedAt && (
+                    <p>
+                      Updated:{" "}
+                      {new Date(selectedStartup.updatedAt).toLocaleString(
+                        "en-IN"
+                      )}
+                    </p>
+                  )}
+                </div>
 
-              <div className="sticky -bottom-8 left-0 right-0 bg-white border-t mt-8 py-4 flex justify-start gap-4">
-                {selectedStartup.founderId && (
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      (window.location.href = `mailto:${selectedStartup.founderId}`)
-                    }
-                  >
-                    <Mail /> Mail Founder
-                  </Button>
-                )}
+                <div className="flex justify-end gap-3 mt-4 md:mt-0">
+                  {selectedStartup.founderId && (
+                    <Button
+                      variant="outline"
+                      className="flex items-center gap-2 text-sm"
+                      onClick={() =>
+                        (window.location.href = `mailto:${selectedStartup.founderId}`)
+                      }
+                    >
+                      <Mail size={16} /> Mail Founder
+                    </Button>
+                  )}
 
-                {selectedStartup.pitchDeck && (
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      window.open(selectedStartup.pitchDeck, "_blank")
-                    }
-                  >
-                    <Download /> Download Pitch Deck
-                  </Button>
-                )}
+                  {selectedStartup.pitchDeck && (
+                    <Button
+                      variant="secondary"
+                      className="flex items-center gap-2 text-sm"
+                      onClick={() =>
+                        window.open(selectedStartup.pitchDeck, "_blank")
+                      }
+                    >
+                      <Download size={16} /> Pitch Deck
+                    </Button>
+                  )}
+                </div>
               </div>
             </>
           )}

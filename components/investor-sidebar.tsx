@@ -13,6 +13,7 @@ import {
   TrendingUpIcon,
   ShoppingBag,
   LogOut,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -23,6 +24,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard/investor", icon: LayoutDashboard },
   { name: "Inbox", href: "/dashboard/investor/inbox", icon: Inbox },
   { name: "Deals", href: "/dashboard/investor/startups", icon: Briefcase },
+  { name: "Pitch Connect", href: "/dashboard/investor/pitch-connect", icon: Mail },
   { name: "Market Research", href: "/dashboard/investor/market-research", icon: TrendingUp },
   { name: "Settings", href: "/dashboard/investor/settings", icon: Settings },
   {
