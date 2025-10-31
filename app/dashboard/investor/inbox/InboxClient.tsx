@@ -1,109 +1,3 @@
-// import { getServerSession } from "next-auth/next";
-// import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-// import InboxClient from "./InboxClient";
-
-// async function getEmailsFromAPI(session: any, page: number, limit: number) {
-//   try {
-//     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-//     const response = await fetch(`${baseUrl}/api/gmail?page=${page}&limit=${limit}`, {
-//       headers: {
-//         Authorization: `Bearer ${session.accessToken}`,
-//         'Content-Type': 'application/json'
-//       },
-//       cache: 'no-store' // Don't cache to get fresh data
-//     });
-
-//     if (response.ok) {
-//       return await response.json();
-//     }
-//   } catch (error) {
-//     console.error("API fetch failed:", error);
-//   }
-  
-//   return { emails: [], total: 0, page, limit };
-// }
-
-// async function getSectorsFromAPI(emails: any[]) {
-//   try {
-//     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-//     const response = await fetch(`${baseUrl}/api/predict-sectors`, {
-//       method: 'POST',
-//       headers: {
-//         'Content-Type': 'application/json'
-//       },
-//       body: JSON.stringify({ emails }),
-//       cache: 'no-store'
-//     });
-
-//     if (response.ok) {
-//       const data = await response.json();
-//       return data.sectors || [];
-//     }
-//   } catch (error) {
-//     console.error("Sectors API fetch failed:", error);
-//   }
-  
-//   return emails.map((email: any) => ({
-//     emailId: email.id,
-//     sector: "General"
-//   }));
-// }
-
-// export default async function InboxPage({ searchParams }: { searchParams: { page?: string; limit?: string } }) {
-//   const session = await getServerSession(authOptions);
-
-//   if (!session) {
-//     return (
-//       <div className="flex h-screen bg-gray-50">
-//         <div className="flex-1 flex items-center justify-center">
-//           <div className="text-center">
-//             <h2 className="text-2xl font-bold text-gray-800 mb-4">Access Denied</h2>
-//             <p className="text-gray-600">Please log in to access your inbox.</p>
-//           </div>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   const page = parseInt(searchParams.page || "1");
-//   const limit = parseInt(searchParams.limit || "10");
-
-//   // Get emails from API
-//   const emailsData = await getEmailsFromAPI(session, page, limit);
-  
-//   // Get sectors from API
-//   const sectorsData = await getSectorsFromAPI(emailsData.emails);
-
-//   // Convert to object for easy lookup
-//   const emailSectors = sectorsData.reduce((acc: Record<string, string>, item: any) => {
-//     acc[item.emailId] = item.sector;
-//     return acc;
-//   }, {});
-
-//   return (
-//     <InboxClient 
-//       initialEmails={emailsData.emails}
-//       initialSectors={emailSectors}
-//       initialTotal={emailsData.total}
-//       initialPage={page}
-//       initialLimit={limit}
-//     />
-//   );
-// }
-
-// export const dynamic = 'force-dynamic';
-
-
-
-
-
-
-
-
-
-
-
-
 "use client";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -146,7 +40,7 @@ interface Email {
   timestamp: string;
   isRead: boolean;
   isStarred: boolean;
-  status: "new" | "reviewed" | "interested" | "rejected" | "draft";
+  status: "new" | "reviewed" | "interested" | "rejected" | "draft" | "Contacted" | "Under Evaluation" | "Pending" | "New";
   attachments: Array<{
     id: string;
     filename: string;
@@ -164,6 +58,8 @@ interface Email {
     funding: string;
     relevanceScore: number;
   };
+  accepted?: boolean;
+  relevanceScore?: number;
 }
 
 interface EmailAnalysis {
@@ -228,25 +124,37 @@ const fetchInvestorThesis = async (): Promise<InvestorThesis> => {
   return res.json();
 };
 
-export default function InboxPage() {
+interface InboxClientProps {
+  initialEmails: Email[];
+  initialSectors: Record<string, string>;
+  initialTotal: number;
+  initialPage: number;
+  initialLimit: number;
+}
+
+export default function InboxClient({ 
+  initialEmails, 
+  initialSectors, 
+  initialTotal, 
+  initialPage, 
+  initialLimit 
+}: InboxClientProps) {
   const router = useRouter();
 
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [attachmentModalOpen, setAttachmentModalOpen] = useState(false);
-  const [downloadingAttachments, setDownloadingAttachments] = useState<
-    Set<string>
-  >(new Set());
-  const [downloadedAttachments, setDownloadedAttachments] = useState<
-    Set<string>
-  >(new Set());
+  const [downloadingAttachments, setDownloadingAttachments] = useState<Set<string>>(new Set());
+  const [downloadedAttachments, setDownloadedAttachments] = useState<Set<string>>(new Set());
   const [acceptedEmails, setAcceptedEmails] = useState<Set<string>>(new Set());
-  const [AccepingMail, setAccepingMail] = useState(false);
+  const [acceptingMail, setAcceptingMail] = useState(false);
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [emailsPerPage] = useState(10);
+  // Use server-provided data as initial state
+  const [emails, setEmails] = useState<Email[]>(initialEmails);
+  const [emailSectors, setEmailSectors] = useState<Record<string, string>>(initialSectors);
+  const [totalEmails, setTotalEmails] = useState<number>(initialTotal);
+  const [currentPage, setCurrentPage] = useState<number>(initialPage);
 
   // React Query for investor thesis
   const { data: thesisData, isLoading: thesisLoading } = useQuery({
@@ -255,39 +163,62 @@ export default function InboxPage() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // React Query for emails
+  // React Query for emails - using server data as initial data
   const {
     data: emailsData,
     isLoading: emailsLoading,
     error: emailsError,
+    refetch: refetchEmails,
   } = useQuery({
-    queryKey: ["emails", currentPage, emailsPerPage],
-    queryFn: () => fetchEmails(currentPage, emailsPerPage),
+    queryKey: ["emails", currentPage, initialLimit],
+    queryFn: () => fetchEmails(currentPage, initialLimit),
+    initialData: currentPage === initialPage ? {
+      emails: initialEmails,
+      total: initialTotal,
+      page: initialPage,
+      limit: initialLimit
+    } : undefined,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
-  // console.log("emailsData", emailsData);
 
+  // Update local state when query data changes
+  useEffect(() => {
+    if (emailsData) {
+      setEmails(emailsData.emails);
+      setTotalEmails(emailsData.total);
+    }
+  }, [emailsData]);
 
-  const emails = emailsData?.emails || [];
-  const totalEmails = emailsData?.total || 0;
-
-  // React Query for sector prediction
+  // React Query for sector prediction - using server data as initial data
   const { data: sectorsData, isLoading: sectorsLoading } = useQuery({
     queryKey: ["sectors", currentPage],
     queryFn: () => predictSectors(emails),
     enabled: !!emails.length,
+    initialData: currentPage === initialPage ? {
+      sectors: Object.entries(initialSectors).map(([emailId, sector]) => ({
+        emailId,
+        sector,
+        method: "keywords" as const
+      })),
+      stats: {}
+    } : undefined,
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
 
-  const emailSectors =
-    sectorsData?.sectors?.reduce((acc, item) => {
-      acc[item.emailId] = item.sector;
-      return acc;
-    }, {} as Record<string, string>) || {};
+  // Update sectors when sector data changes
+  useEffect(() => {
+    if (sectorsData?.sectors) {
+      const newSectors = sectorsData.sectors.reduce((acc, item) => {
+        acc[item.emailId] = item.sector;
+        return acc;
+      }, {} as Record<string, string>);
+      setEmailSectors(newSectors);
+    }
+  }, [sectorsData]);
 
   // Calculate relevance scores based on investor thesis
   const calculateRelevanceScore = (email: Email): number => {
-    if (!thesisData) return email.startup?.relevanceScore || 0;
+    if (!thesisData) return email.relevanceScore || 0;
 
     const text = (email.subject + " " + email.content).toLowerCase();
     let score = 0;
@@ -343,12 +274,8 @@ export default function InboxPage() {
     return Math.round(relevance);
   };
 
-  const [emailAnalyses, setEmailAnalyses] = useState<
-    Record<string, EmailAnalysis>
-  >({});
-  const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>(
-    {}
-  );
+  const [emailAnalyses, setEmailAnalyses] = useState<Record<string, EmailAnalysis>>({});
+  const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>({});
 
   // Format date to show full date
   const formatDate = (dateString: string) => {
@@ -388,6 +315,7 @@ export default function InboxPage() {
       }
     } catch (err) {
       console.error("Error loading full analysis:", err);
+      toast.error("Failed to load detailed analysis");
     } finally {
       setLoadingDetails((prev) => ({ ...prev, [emailId]: false }));
     }
@@ -412,14 +340,11 @@ export default function InboxPage() {
     const extensions: { [key: string]: string } = {
       "application/pdf": "pdf",
       "application/msword": "doc",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        "docx",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
       "application/vnd.ms-excel": "xls",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-        "xlsx",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
       "application/vnd.ms-powerpoint": "ppt",
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation":
-        "pptx",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
       "image/jpeg": "jpg",
       "image/png": "png",
       "image/gif": "gif",
@@ -461,9 +386,7 @@ export default function InboxPage() {
 
     try {
       // Show immediate feedback
-      toast.info(
-        `Starting download: ${attachment.filename || attachment.name}`
-      );
+      toast.info(`Starting download: ${attachment.filename || attachment.name}`);
 
       let downloadUrl = attachment.url;
 
@@ -527,16 +450,13 @@ export default function InboxPage() {
 
       // Show success message
       toast.success(`Downloaded: ${filename}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error downloading attachment:", error);
 
       // Show error message
-      toast.error(
-        `Failed to download: ${attachment.filename || attachment.name}`,
-        {
-          description: error.message,
-        }
-      );
+      toast.error(`Failed to download: ${attachment.filename || attachment.name}`, {
+        description: error.message,
+      });
     } finally {
       // Remove from downloading set
       setDownloadingAttachments((prev) => {
@@ -577,9 +497,7 @@ export default function InboxPage() {
   const downloadAllAttachments = async () => {
     if (!selectedEmail?.attachments?.length) return;
 
-    toast.info(
-      `Starting download of ${selectedEmail.attachments.length} files...`
-    );
+    toast.info(`Starting download of ${selectedEmail.attachments.length} files...`);
 
     // Download sequentially to avoid overwhelming the browser
     for (let i = 0; i < selectedEmail.attachments.length; i++) {
@@ -610,12 +528,13 @@ export default function InboxPage() {
     return (
       <div
         key={index}
-        className={`flex items-center justify-between p-3 border rounded-lg transition-all duration-200 ${isDownloading
-          ? "bg-blue-50 border-blue-200"
-          : isDownloaded
+        className={`flex items-center justify-between p-3 border rounded-lg transition-all duration-200 ${
+          isDownloading
+            ? "bg-blue-50 border-blue-200"
+            : isDownloaded
             ? "bg-green-50 border-green-200"
             : "hover:bg-gray-50 cursor-pointer"
-          }`}
+        }`}
         onClick={() =>
           !isDownloading &&
           downloadAttachment(attachment, selectedEmail?.subject || "")
@@ -655,9 +574,15 @@ export default function InboxPage() {
   };
 
   // Pagination calculations
-  const totalPages = Math.ceil(totalEmails / emailsPerPage);
-  const startIndex = (currentPage - 1) * emailsPerPage;
-  const endIndex = startIndex + emailsPerPage;
+  const totalPages = Math.ceil(totalEmails / initialLimit);
+  const startIndex = (currentPage - 1) * initialLimit;
+  const endIndex = startIndex + initialLimit;
+
+  // Handle page change
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    setSelectedEmail(null); // Close sidebar when changing pages
+  };
 
   const filteredEmails = emails.filter((email) => {
     const matchesSearch =
@@ -674,80 +599,9 @@ export default function InboxPage() {
     return matchesSearch && matchesFilter;
   });
 
-  // Pagination controls
-  const goToPage = (page: number) => {
-    setCurrentPage(page);
-    setSelectedEmail(null); // Close sidebar when changing pages
-  };
-
-  // Show loading until sectors are predicted for current page
-  const showLoading =
-    emailsLoading || (emails.length > 0 && sectorsLoading) || thesisLoading;
-
-  // if (showLoading) {
-  //   return (
-  //     <div className="flex h-screen">
-  //       <InvestorSidebar />
-  //       <div className="flex-1 flex items-center justify-center">
-  //         <div className="text-center">
-  //           <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
-  //           <p className="text-muted-foreground text-lg">
-  //             {emailsLoading ? "Loading emails..." : "Analyzing sectors..."}
-  //           </p>
-  //         </div>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
-  if (emailsError) {
-    return (
-      <div className="flex h-screen">
-        <InvestorSidebar />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-red-600 text-lg font-semibold">
-              Error loading emails
-            </p>
-            <p className="text-gray-600 text-sm mt-2">
-              {emailsError?.message || "Something went wrong. Please try again."}
-            </p>
-
-            {/* Optional: show more details if it's a server error */}
-            {emailsError?.response?.data?.message && (
-              <p className="text-gray-500 text-sm mt-1">
-                Details: {emailsError.response.data.message}
-              </p>
-            )}
-
-            <Button onClick={() => window.location.reload()} className="mt-4">
-              Retry
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (emailsError) {
-    return (
-      <div className="flex h-screen">
-        <InvestorSidebar />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-red-600 text-lg">Error loading emails</p>
-            <Button onClick={() => window.location.reload()} className="mt-4">
-              Retry
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const acceptPitch = async (emailId: string) => {
     try {
-      setAccepingMail(true);
+      setAcceptingMail(true);
       if (!emailAnalyses[emailId]) return;
 
       const email = emails.find((e) => e.id === emailId);
@@ -778,13 +632,37 @@ export default function InboxPage() {
 
       // Mark this email as accepted
       setAcceptedEmails((prev) => new Set(prev).add(emailId));
-
-      setAccepingMail(false);
+      setAcceptingMail(false);
     } catch (err: any) {
       console.error(err);
       toast.error(`Error accepting pitch: ${err.message}`);
+      setAcceptingMail(false);
     }
   };
+
+  // Show loading only for subsequent page loads, not initial load
+  const showLoading = emailsLoading && currentPage !== initialPage;
+
+  if (emailsError) {
+    return (
+      <div className="flex h-screen">
+        <InvestorSidebar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-red-600 text-lg font-semibold">
+              Error loading emails
+            </p>
+            <p className="text-gray-600 text-sm mt-2">
+              {emailsError?.message || "Something went wrong. Please try again."}
+            </p>
+            <Button onClick={() => refetchEmails()} className="mt-4">
+              Retry
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -814,147 +692,158 @@ export default function InboxPage() {
 
           {/* Table with fixed column widths */}
           <div className="p-8">
-            <div className="overflow-hidden rounded-lg border">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 w-1/5">
-                      From
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 w-1/6">
-                      Date
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 w-1/5">
-                      Sector
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 w-1/5">
-                      Relevance
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 w-1/6">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {filteredEmails.map((email) => {
-                    const relevanceScore = calculateRelevanceScore(email);
-                    return (
-                      <tr
-                        key={email.id}
-                        onClick={() => handleEmailSelect(email)}
-                        onDoubleClick={() => handleEmailDoubleClick(email)}
-                        className={`cursor-pointer transition-colors hover:bg-gray-50 ${selectedEmail?.id === email.id ? "bg-emerald-50" : ""
-                          }`}
-                      >
-                        <td className="px-4 py-4 text-sm font-medium text-gray-900 whitespace-nowrap truncate max-w-[200px]">
-                          {email.from}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-500 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-gray-400" />
-                            {formatDate(email.timestamp)}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-500 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate max-w-[120px]">
-                              {emailSectors[email.id] || "Unknown"}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            <Progress
-                              value={relevanceScore}
-                              className="h-2 w-20"
-                            />
-                            <span className="text-sm font-medium min-w-[40px]">
-                              {relevanceScore}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <Badge
-                            className={`${email?.status == "Contacted"
-                              ? "bg-blue-100 text-blue-700"
-                              : email?.status == "Under Evaluation"
-                                ? "bg-yellow-100 text-yellow-700"
-                                : email?.status == "Pending"
-                                  ? "bg-red-100 text-red-700"
-                                  : email?.status == "New"
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : ""
-                              }`}
-                          >
-                            {email.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-6">
-                <div className="text-sm text-gray-700">
-                  Showing {startIndex + 1} to {Math.min(endIndex, totalEmails)}{" "}
-                  of {totalEmails} results
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => goToPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </Button>
-
-                  {/* Page Numbers */}
-                  <div className="flex space-x-1">
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum;
-                      if (totalPages <= 5) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i;
-                      } else {
-                        pageNum = currentPage - 2 + i;
-                      }
-
-                      return (
-                        <Button
-                          key={pageNum}
-                          variant={
-                            currentPage === pageNum ? "default" : "outline"
-                          }
-                          size="sm"
-                          onClick={() => goToPage(pageNum)}
-                          className="w-8 h-8 p-0"
-                        >
-                          {pageNum}
-                        </Button>
-                      );
-                    })}
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => goToPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+            {showLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
+                  <p className="text-muted-foreground text-lg">Loading emails...</p>
                 </div>
               </div>
+            ) : (
+              <>
+                <div className="overflow-hidden rounded-lg border">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 w-1/5">
+                          From
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 w-1/6">
+                          Date
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 w-1/5">
+                          Sector
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 w-1/5">
+                          Relevance
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 w-1/6">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {filteredEmails.map((email) => {
+                        const relevanceScore = calculateRelevanceScore(email);
+                        return (
+                          <tr
+                            key={email.id}
+                            onClick={() => handleEmailSelect(email)}
+                            onDoubleClick={() => handleEmailDoubleClick(email)}
+                            className={`cursor-pointer transition-colors hover:bg-gray-50 ${selectedEmail?.id === email.id ? "bg-emerald-50" : ""
+                              }`}
+                          >
+                            <td className="px-4 py-4 text-sm font-medium text-gray-900 whitespace-nowrap truncate max-w-[200px]">
+                              {email.from}
+                            </td>
+                            <td className="px-4 py-4 text-sm text-gray-500 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-gray-400" />
+                                {formatDate(email.timestamp)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-sm text-gray-500 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span className="truncate max-w-[120px]">
+                                  {emailSectors[email.id] || "Unknown"}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-3">
+                                <Progress
+                                  value={relevanceScore}
+                                  className="h-2 w-20"
+                                />
+                                <span className="text-sm font-medium min-w-[40px]">
+                                  {relevanceScore}%
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <Badge
+                                className={`${email?.status == "Contacted"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : email?.status == "Under Evaluation"
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : email?.status == "Pending"
+                                      ? "bg-red-100 text-red-700"
+                                      : email?.status == "New"
+                                        ? "bg-emerald-100 text-emerald-700"
+                                        : ""
+                                  }`}
+                              >
+                                {email.status}
+                              </Badge>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-6">
+                    <div className="text-sm text-gray-700">
+                      Showing {startIndex + 1} to {Math.min(endIndex, totalEmails)}{" "}
+                      of {totalEmails} results
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+
+                      {/* Page Numbers */}
+                      <div className="flex space-x-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={
+                                currentPage === pageNum ? "default" : "outline"
+                              }
+                              size="sm"
+                              onClick={() => handlePageChange(pageNum)}
+                              className="w-8 h-8 p-0"
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1019,22 +908,21 @@ export default function InboxPage() {
 
                     {/* Action Buttons */}
                     <div className="flex gap-3">
-                      {/* <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 cursor-pointer">
-                        Accept
-                      </Button> */}
                       <Button
-                        className={`flex-1 cursor-pointer ${selectedEmail?.accepted
+                        className={`flex-1 cursor-pointer ${selectedEmail?.accepted || acceptedEmails.has(selectedEmail.id)
                           ? "bg-green-600 hover:bg-green-700"
                           : "bg-emerald-600 hover:bg-emerald-700"
                           }`}
                         onClick={() => acceptPitch(selectedEmail.id)}
                         disabled={
-                          selectedEmail?.accepted || AccepingMail
+                          selectedEmail?.accepted || acceptedEmails.has(selectedEmail.id) || acceptingMail
                         }
                       >
-                        {selectedEmail?.accepted
+                        {selectedEmail?.accepted || acceptedEmails.has(selectedEmail.id)
                           ? "Accepted"
-                          : "Accept"}
+                          : acceptingMail
+                            ? "Accepting..."
+                            : "Accept"}
                       </Button>
 
                       <Button
