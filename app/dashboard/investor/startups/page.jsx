@@ -28,28 +28,76 @@ export default function Page() {
   const [activeTab, setActiveTab] = useState("Pitch Connect");
   const [deals, setDeals] = useState([]);
   const [investorThesis, setInvestorThesis] = useState(null);
+  const [debugInfo, setDebugInfo] = useState("");
 
   useEffect(() => {
+    console.log("Component mounted - fetching data...");
     fetchInvestorThesis();
-    fetchStartups();
   }, []);
 
   // Fetch investor thesis
   const fetchInvestorThesis = async () => {
     try {
+      console.log("🔄 Fetching investor thesis...");
+      setDebugInfo("Fetching investor thesis...");
+      
       const res = await fetch("/api/investor/thesis");
+      console.log("Thesis API response status:", res.status);
+      
       if (res.ok) {
         const thesis = await res.json();
+        console.log("✅ Thesis fetched successfully:", thesis);
+        setDebugInfo(`Thesis loaded: ${JSON.stringify(thesis).substring(0, 100)}...`);
         setInvestorThesis(thesis);
+        
+        // Fetch startups after thesis is loaded
+        await fetchStartups(thesis);
+      } else {
+        console.error("❌ Failed to fetch thesis, status:", res.status);
+        setDebugInfo("Failed to fetch thesis, using default");
+        // Set a default thesis structure
+        const defaultThesis = {
+          sectors: [],
+          stages: [],
+          checkSizeMin: 0,
+          checkSizeMax: 0,
+          geographies: [],
+          keywords: [],
+          excludedKeywords: []
+        };
+        setInvestorThesis(defaultThesis);
+        await fetchStartups(defaultThesis);
       }
     } catch (err) {
-      console.error("Error fetching investor thesis:", err);
+      console.error("❌ Error fetching investor thesis:", err);
+      setDebugInfo("Error fetching thesis");
+      const defaultThesis = {
+        sectors: [],
+        stages: [],
+        checkSizeMin: 0,
+        checkSizeMax: 0,
+        geographies: [],
+        keywords: [],
+        excludedKeywords: []
+      };
+      setInvestorThesis(defaultThesis);
+      await fetchStartups(defaultThesis);
     }
   };
 
   // Calculate relevancy score based on investor thesis
-  const calculateRelevancyScore = (startup) => {
-    if (!investorThesis) return 80; // Default score if no thesis available
+  const calculateRelevancyScore = (startup, thesis) => {
+    console.log(`📊 Calculating score for: ${startup.name}`, {
+      startupSector: startup.sector,
+      startupStage: startup.stage,
+      startupFunding: startup.fundingRequirement,
+      startupLocation: startup.location
+    });
+
+    if (!thesis || Object.keys(thesis).length === 0) {
+      console.log("⚠️ No thesis available, using default score 50");
+      return 50;
+    }
 
     let score = 0;
     let totalWeight = 0;
@@ -61,112 +109,163 @@ export default function Page() {
       keywords: 10,
     };
 
+    console.log("🎯 Thesis criteria:", {
+      sectors: thesis.sectors,
+      stages: thesis.stages,
+      checkSize: { min: thesis.checkSizeMin, max: thesis.checkSizeMax },
+      geographies: thesis.geographies,
+      keywords: thesis.keywords,
+      excludedKeywords: thesis.excludedKeywords
+    });
+
     // Sector matching
-    if (investorThesis.sectors && investorThesis.sectors.length > 0) {
-      if (investorThesis.sectors.includes(startup.sector)) {
+    if (thesis.sectors && thesis.sectors.length > 0 && startup.sector) {
+      const startupSector = startup.sector.toLowerCase().trim();
+      const matchedSector = thesis.sectors.some(
+        sector => sector.toLowerCase().trim() === startupSector
+      );
+      console.log(`🏢 Sector matching: ${startupSector} vs ${thesis.sectors} -> ${matchedSector}`);
+      if (matchedSector) {
         score += weights.sector;
+        console.log(`✅ Sector matched! +${weights.sector}`);
       }
       totalWeight += weights.sector;
     }
 
     // Stage matching
-    if (investorThesis.stages && investorThesis.stages.length > 0) {
-      if (investorThesis.stages.includes(startup.stage)) {
+    if (thesis.stages && thesis.stages.length > 0 && startup.stage) {
+      const startupStage = startup.stage.toLowerCase().trim();
+      const matchedStage = thesis.stages.some(
+        stage => stage.toLowerCase().trim() === startupStage
+      );
+      console.log(`📈 Stage matching: ${startupStage} vs ${thesis.stages} -> ${matchedStage}`);
+      if (matchedStage) {
         score += weights.stage;
+        console.log(`✅ Stage matched! +${weights.stage}`);
       }
       totalWeight += weights.stage;
     }
 
     // Funding range matching
     if (
-      investorThesis.checkSizeMin !== undefined &&
-      investorThesis.checkSizeMax !== undefined &&
+      thesis.checkSizeMin !== undefined &&
+      thesis.checkSizeMax !== undefined &&
       startup.fundingRequirement
     ) {
       const startupMin = startup.fundingRequirement.min || 0;
-      const startupMax = startup.fundingRequirement.max || 0;
-      const thesisMin = investorThesis.checkSizeMin;
-      const thesisMax = investorThesis.checkSizeMax;
+      const startupMax = startup.fundingRequirement.max || Infinity;
+      const thesisMin = thesis.checkSizeMin;
+      const thesisMax = thesis.checkSizeMax;
 
       // Check if funding ranges overlap
-      if (startupMin <= thesisMax && startupMax >= thesisMin) {
+      const fundingOverlap = startupMin <= thesisMax && startupMax >= thesisMin;
+      console.log(`💰 Funding matching: Startup ${startupMin}-${startupMax} vs Thesis ${thesisMin}-${thesisMax} -> ${fundingOverlap}`);
+      
+      if (fundingOverlap) {
         score += weights.funding;
+        console.log(`✅ Funding matched! +${weights.funding}`);
       }
       totalWeight += weights.funding;
     }
 
-    // Geography matching (simplified - you might want to enhance this)
+    // Geography matching
     if (
-      investorThesis.geographies &&
-      investorThesis.geographies.length > 0 &&
+      thesis.geographies &&
+      thesis.geographies.length > 0 &&
       startup.location
     ) {
       const startupLocation = startup.location.toLowerCase();
-      if (
-        investorThesis.geographies.some((geo) =>
-          startupLocation.includes(geo.toLowerCase())
-        )
-      ) {
+      const matchedGeo = thesis.geographies.some(geo =>
+        startupLocation.includes(geo.toLowerCase())
+      );
+      console.log(`🌍 Geography matching: ${startupLocation} vs ${thesis.geographies} -> ${matchedGeo}`);
+      if (matchedGeo) {
         score += weights.geography;
+        console.log(`✅ Geography matched! +${weights.geography}`);
       }
       totalWeight += weights.geography;
     }
 
     // Keyword matching
     if (
-      investorThesis.keywords &&
-      investorThesis.keywords.length > 0 &&
+      thesis.keywords &&
+      thesis.keywords.length > 0 &&
       startup.description
     ) {
       const description = startup.description.toLowerCase();
-      const matchedKeywords = investorThesis.keywords.filter((keyword) =>
+      const matchedKeywords = thesis.keywords.filter(keyword =>
         description.includes(keyword.toLowerCase())
       );
+      const keywordScore = (matchedKeywords.length / thesis.keywords.length) * weights.keywords;
+      console.log(`🔤 Keyword matching: ${matchedKeywords.length}/${thesis.keywords.length} matched -> +${keywordScore.toFixed(1)}`);
+      
       if (matchedKeywords.length > 0) {
-        score +=
-          (matchedKeywords.length / investorThesis.keywords.length) *
-          weights.keywords;
+        score += keywordScore;
+        console.log(`✅ Keywords matched! +${keywordScore.toFixed(1)}`);
       }
       totalWeight += weights.keywords;
     }
 
     // Excluded keywords penalty
+    let excludedPenalty = false;
     if (
-      investorThesis.excludedKeywords &&
-      investorThesis.excludedKeywords.length > 0 &&
+      thesis.excludedKeywords &&
+      thesis.excludedKeywords.length > 0 &&
       startup.description
     ) {
       const description = startup.description.toLowerCase();
-      const excludedMatches = investorThesis.excludedKeywords.filter(
-        (keyword) => description.includes(keyword.toLowerCase())
+      const excludedMatches = thesis.excludedKeywords.filter(keyword =>
+        description.includes(keyword.toLowerCase())
       );
       if (excludedMatches.length > 0) {
+        console.log(`🚫 Excluded keywords found: ${excludedMatches} -> applying 30% penalty`);
         score *= 0.7; // 30% penalty for excluded keywords
+        excludedPenalty = true;
       }
     }
 
-    // Calculate final score as percentage
-    const finalScore =
-      totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 80;
+    // Calculate final score
+    const finalScore = totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 50;
+    console.log(`🎯 Final calculation: ${score}/${totalWeight} = ${finalScore}%${excludedPenalty ? ' (with penalty)' : ''}`);
 
     // Ensure score is between 0-100
     return Math.min(100, Math.max(0, finalScore));
   };
 
-  const fetchStartups = async () => {
+  const fetchStartups = async (thesis = investorThesis) => {
     try {
+      console.log("🔄 Fetching startups...");
+      setDebugInfo(prev => prev + "\nFetching startups...");
+      
       const res = await fetch("/api/investor/startups", { cache: "no-store" });
+      
+      if (!res.ok) {
+        throw new Error(`Failed to fetch startups: ${res.status}`);
+      }
+      
       const data = await res.json();
+      console.log(`✅ Startups fetched: ${data.length} startups`);
+      setDebugInfo(prev => prev + `\nFound ${data.length} startups`);
 
+      // Use the provided thesis or fall back to state
+      const thesisToUse = thesis || investorThesis;
+      
       // Calculate relevancy scores for each startup
       const startupsWithScores = data.map((startup) => ({
         ...startup,
-        relevanceScore: calculateRelevancyScore(startup),
+        relevanceScore: calculateRelevancyScore(startup, thesisToUse),
       }));
 
+      console.log("📊 Startups with scores:", startupsWithScores.map(s => ({
+        name: s.name,
+        score: s.relevanceScore
+      })));
+      
+      setDebugInfo(prev => prev + `\nScores calculated: ${startupsWithScores.map(s => s.relevanceScore).join(', ')}`);
       setStartups(startupsWithScores);
     } catch (err) {
-      console.error("Error fetching startups:", err);
+      console.error("❌ Error fetching startups:", err);
+      setDebugInfo(prev => prev + `\nError: ${err.message}`);
     }
   };
 
@@ -185,10 +284,10 @@ export default function Page() {
 
   const fetchDeals = async () => {
     try {
-      const res = await fetch("/api/deals"); // your Pitch Accept API endpoint
+      const res = await fetch("/api/deals");
       const data = await res.json();
       if (res.ok) {
-        setDeals(data.data); // assuming your API returns { data: [...] }
+        setDeals(data.data);
       } else {
         console.error("Failed to fetch deals:", data.error);
       }
@@ -242,10 +341,10 @@ export default function Page() {
     }
   };
 
-  //  Filter startups based on active tab
+  // Filter startups based on active tab
   const filteredStartups = startups.filter((s) => {
-    if (activeTab === "Pitch Connect") return true; // show ALL
-    if (activeTab === "Deals") return false; // handled by another API later
+    if (activeTab === "Pitch Connect") return true;
+    if (activeTab === "Deals") return false;
     if (activeTab === "Archived") return s.status === "rejected";
     return true;
   });
@@ -255,6 +354,29 @@ export default function Page() {
       <InvestorSidebar />
 
       <div className="flex-1 overflow-auto">
+        {/* Debug Info - Remove in production */}
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-4">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <span className="text-yellow-500">🔧</span>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                <strong>Debug Info:</strong> {debugInfo}
+              </p>
+              <button 
+                onClick={() => {
+                  console.log("Current investorThesis:", investorThesis);
+                  console.log("Current startups:", startups);
+                }}
+                className="text-xs bg-yellow-500 text-white px-2 py-1 rounded mt-1"
+              >
+                Log to Console
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Header */}
         <header className="sticky top-0 z-10 border-b bg-white">
           <div className="flex h-16 items-center justify-between px-8">
@@ -310,15 +432,6 @@ export default function Page() {
                         <th className="px-6 py-3 text-left font-semibold">
                           Actions
                         </th>
-                        {/* <th className="px-6 py-3 text-left font-semibold">
-                          Growth Stage
-                        </th>
-                        <th className="px-6 py-3 text-left font-semibold">
-                          Funding Mentioned
-                        </th>
-                        <th className="px-6 py-3 text-left font-semibold">
-                          Actions
-                        </th> */}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-gray-700">
@@ -331,26 +444,7 @@ export default function Page() {
                           <td className="text-sm px-6 py-4 font-medium">
                             {deal.summary}
                           </td>
-                          {/* <td className="text-sm px-6 py-4">{deal.sector}</td>
-                          <td className="text-sm px-6 py-4">
-                            {deal.fromEmail}
-                          </td>
-                          <td className="text-sm px-6 py-4">
-                            {deal.growthStage}
-                          </td>
-                          <td className="text-sm px-6 py-4">
-                            {deal.fundingMentioned ? "Yes" : "No"}
-                          </td> */}
                           <td className="px-6 py-4">
-                            {/* <Button
-                              variant="default"
-                              size="sm"
-                              onClick={() =>
-                                (window.location.href = `mailto:${deal.fromEmail}`)
-                              }
-                            >
-                              Mail Founder
-                            </Button> */}
                             <Button
                               variant="default"
                               className="w-25 mr-2 text-xs bg-white hover:bg-emerald-600 text-dark hover:text-white border border-[#ccc] font-medium"
@@ -363,11 +457,7 @@ export default function Page() {
                                 setIsEmailModalOpen(true);
                                 setSelectedStartup(deal);
                               }}
-                              // disabled={startup.status === "contacted"}
                             >
-                              {/* {startup.status === "contacted"
-                                ? "Mail Sent"
-                                : "Mail Founder"} */}
                               Mail Founder
                             </Button>
                           </td>
@@ -409,7 +499,7 @@ export default function Page() {
 
                   <tbody className="divide-y divide-gray-100 text-gray-700">
                     {filteredStartups.map((startup) => {
-                      console.log(startup);
+                      console.log("Rendering startup:", startup.name, "Score:", startup.relevanceScore);
                       
                       return (
                         <tr
@@ -434,11 +524,11 @@ export default function Page() {
                           <td className="text-sm px-6 py-4 text-sm">
                             <div className="flex items-center gap-3">
                               <Progress
-                                value={startup?.relevanceScore || 80}
+                                value={startup?.relevanceScore || 50}
                                 className="h-2 w-24"
                               />
                               <span className="text-sm font-medium">
-                                {startup?.relevanceScore || 80}%
+                                {startup?.relevanceScore || 50}%
                               </span>
                             </div>
                           </td>
@@ -510,7 +600,7 @@ export default function Page() {
         </div>
       </div>
 
-      {/* === MODALS remain unchanged === */}
+      {/* Startup Details Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-6xl w-full max-h-[90vh] overflow-y-auto p-8 bg-white rounded shadow-2xl">
           {selectedStartup && (
@@ -603,6 +693,7 @@ export default function Page() {
         </DialogContent>
       </Dialog>
 
+      {/* Email Modal */}
       <Dialog open={isEmailModalOpen} onOpenChange={setIsEmailModalOpen}>
         <DialogContent className="max-w-lg w-full p-6 bg-white rounded shadow-xl">
           <DialogHeader>
