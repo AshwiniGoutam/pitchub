@@ -354,29 +354,6 @@ export default function Page() {
       <InvestorSidebar />
 
       <div className="flex-1 overflow-auto">
-        {/* Debug Info - Remove in production */}
-        <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-4">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <span className="text-yellow-500">🔧</span>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-yellow-700">
-                <strong>Debug Info:</strong> {debugInfo}
-              </p>
-              <button 
-                onClick={() => {
-                  console.log("Current investorThesis:", investorThesis);
-                  console.log("Current startups:", startups);
-                }}
-                className="text-xs bg-yellow-500 text-white px-2 py-1 rounded mt-1"
-              >
-                Log to Console
-              </button>
-            </div>
-          </div>
-        </div>
-
         {/* Header */}
         <header className="sticky top-0 z-10 border-b bg-white">
           <div className="flex h-16 items-center justify-between px-8">
