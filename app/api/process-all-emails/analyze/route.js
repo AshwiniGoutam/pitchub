@@ -1,4 +1,4 @@
-import { summarizeEmail } from "../../../lib/gemini";
+import { summarizeEmail } from "../../../../lib/gemini";
 import { getDatabase } from "@/lib/mongodb";
 
 export async function POST(request) {
@@ -9,25 +9,22 @@ export async function POST(request) {
       return Response.json({ error: "Emails array is required" }, { status: 400 });
     }
 
-    console.log(`Starting batch analysis for ${emails.length} emails...`);
-
     const db = await getDatabase();
     const collection = db.collection("emailAnalyses");
     const analysisResults = [];
 
     for (const email of emails) {
       try {
-        // Check if email record already exists
         const existing = await collection.findOne({ emailId: email.id });
 
-        // Only summarize if not already analyzed
+        // Run summarize only if no analysis exists yet
         const analysis =
           existing?.analysis && Object.keys(existing.analysis).length > 0
             ? existing.analysis
             : await summarizeEmail(email.content);
 
-        // Merge new and existing data
-        const updatedRecord = {
+        // Merge new fields while preserving existing ones
+        const record = {
           ...existing,
           emailId: email.id,
           analysis,
@@ -35,21 +32,13 @@ export async function POST(request) {
           note: note ?? existing?.note ?? "",
           meetingDetails: meetingDetails ?? existing?.meetingDetails ?? null,
           requestData: requestData ?? existing?.requestData ?? null,
-          createdAt: existing?.createdAt || new Date(),
           updatedAt: new Date(),
+          createdAt: existing?.createdAt || new Date(),
         };
 
-        // Save merged record
-        await collection.updateOne(
-          { emailId: email.id },
-          { $set: updatedRecord },
-          { upsert: true }
-        );
+        await collection.updateOne({ emailId: email.id }, { $set: record }, { upsert: true });
+        analysisResults.push(record);
 
-        analysisResults.push(updatedRecord);
-
-        // Small delay
-        await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (error) {
         console.error(`Error analyzing email ${email.id}:`, error);
         analysisResults.push({
@@ -60,25 +49,9 @@ export async function POST(request) {
       }
     }
 
-    console.log("Batch analysis completed");
-
-    // Create confirmation message
-    let message = "Analysis completed successfully";
-    if (action === "request_data") message = "Data request recorded successfully";
-    else if (action === "schedule_meeting") message = "Meeting scheduled successfully";
-    else if (action === "add_note") message = "Note saved successfully";
-    else if (action === "reject") message = "Rejection email queued successfully";
-
-    return Response.json({
-      status: "completed",
-      message,
-      analyses: analysisResults,
-    });
+    return Response.json({ status: "completed", analyses: analysisResults });
   } catch (error) {
     console.error("API Error:", error);
-    return Response.json(
-      { error: "Failed to process emails", details: error.message },
-      { status: 500 }
-    );
+    return Response.json({ error: "Failed to process emails", details: error.message }, { status: 500 });
   }
 }
