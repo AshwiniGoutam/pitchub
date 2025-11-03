@@ -22,6 +22,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { useSession } from "next-auth/react";
+import RequestDataModal from './requestDataModal'
+import RequestDataDialog from "./requestDataModal";
 
 interface EmailData {
   id: string;
@@ -69,6 +72,7 @@ interface EmailsResponse {
 }
 
 export default function DealDetailPage() {
+  const { data: session } = useSession();
   const params = useParams();
   const router = useRouter();
   const [notes, setNotes] = useState("");
@@ -76,8 +80,13 @@ export default function DealDetailPage() {
   const [emailAnalysis, setEmailAnalysis] = useState<EmailAnalysis | null>(
     null
   );
+  const [AnalysisData, setAnalysisData] = useState('')
   const [loading, setLoading] = useState(true);
   const [attachmentModalOpen, setAttachmentModalOpen] = useState(false);
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
+
+  // console.log('emailData', AnalysisData?.requestData);
+
 
   // Fetch email data based on ID
   useEffect(() => {
@@ -107,6 +116,7 @@ export default function DealDetailPage() {
             const analysisData = await analysisRes.json();
             if (analysisData.analyses && analysisData.analyses.length > 0) {
               // Ensure the analysis has all required fields with fallbacks
+              setAnalysisData(analysisData.analyses[0])
               const analysis = analysisData.analyses[0].analysis;
               setEmailAnalysis({
                 summary: analysis.summary || "No summary available.",
@@ -114,9 +124,9 @@ export default function DealDetailPage() {
                 competitiveAnalysis: Array.isArray(analysis.competitiveAnalysis)
                   ? analysis.competitiveAnalysis
                   : [
-                      "Higher efficiency than current market leaders.",
-                      "Manufacturing costs are currently higher.",
-                    ],
+                    "Higher efficiency than current market leaders.",
+                    "Manufacturing costs are currently higher.",
+                  ],
                 marketResearch:
                   analysis.marketResearch || "Market analysis not available.",
                 fundingMentioned: analysis.fundingMentioned || false,
@@ -264,10 +274,10 @@ export default function DealDetailPage() {
       return emailAnalysis.growthStage === "Early"
         ? "Seed"
         : emailAnalysis.growthStage === "Expansion"
-        ? "Series A"
-        : emailAnalysis.growthStage === "Mature"
-        ? "Series B+"
-        : "Seed";
+          ? "Series A"
+          : emailAnalysis.growthStage === "Mature"
+            ? "Series B+"
+            : "Seed";
     }
     return "Seed";
   };
@@ -275,9 +285,7 @@ export default function DealDetailPage() {
   // Extract company name from subject
   const getCompanyName = () => {
     if (emailData?.subject) {
-      // Try to extract company name from subject
       const subject = emailData.subject;
-      // Remove common prefixes and get first few words
       const cleanSubject = subject.replace(
         /^(Pitch|Deal|Investment|Startup):?\s*/i,
         ""
@@ -306,6 +314,9 @@ export default function DealDetailPage() {
   };
 
   const handleAction = async (action: string, extraData = {}) => {
+    // console.log(emailData);
+    // return
+
     if (!emailData) return;
     try {
       const res = await fetch("/api/process-all-emails/analyze", {
@@ -321,8 +332,24 @@ export default function DealDetailPage() {
       if (res.ok) {
         const data = await res.json();
         setEmailAnalysis(data?.analyses?.[0]?.analysis || null);
-        alert(`${action.replace("_", " ")} successful!`);
-        console.log(data);
+        // alert(`${action.replace("_", " ")} successful!`);
+        // console.log(data);
+
+        if (action === "request_data") {
+          await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/send-email`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: "ashwanigoutam16@gmail.com",
+              subject: `Data Request from ${session?.user?.email || "a user"}`,
+              body: `
+                Hi,
+                ${session?.user?.email || "A user"} has requested access to data.
+                Please review and provide the required data at your earliest convenience.
+                – ${session?.user?.name}`,
+            }),
+          });
+        }
       } else {
         alert("Action failed. Try again.");
       }
@@ -399,6 +426,12 @@ export default function DealDetailPage() {
     <div className="flex h-screen bg-gray-50">
       <InvestorSidebar />
 
+      <RequestDataDialog
+        open={requestModalOpen}
+        onOpenChange={setRequestModalOpen}
+        onSubmit={handleRequestData}
+      />
+
       <div className="flex-1 overflow-auto">
         {/* Header */}
         <header className="sticky top-0 z-10 border-b bg-white">
@@ -444,17 +477,16 @@ export default function DealDetailPage() {
                 Seeking $2M
               </p>
               <Badge
-                className={`mt-2 ${
-                  emailData?.status == "Contacted"
-                    ? "bg-blue-100 text-blue-700"
-                    : emailData?.status == "Under Evaluation"
+                className={`mt-2 ${emailData?.status == "Contacted"
+                  ? "bg-blue-100 text-blue-700"
+                  : emailData?.status == "Under Evaluation"
                     ? "bg-yellow-100 text-yellow-700"
                     : emailData?.status == "Pending"
-                    ? "bg-red-100 text-red-700"
-                    : emailData?.status == "New"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : ""
-                }`}
+                      ? "bg-red-100 text-red-700"
+                      : emailData?.status == "New"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : ""
+                  }`}
               >
                 {emailData.status}
               </Badge>
@@ -466,8 +498,12 @@ export default function DealDetailPage() {
               >
                 Schedule Meeting
               </Button>
-              <Button className="bg-emerald-600" onClick={handleRequestData}>
-                Request Data
+              <Button
+                className="bg-emerald-600"
+                onClick={() => setRequestModalOpen(true)}
+                disabled={AnalysisData?.requestData}
+              >
+                {AnalysisData?.requestData ? "Data Requested" : "Request Data"}
               </Button>
               <Button variant="outline" onClick={handleReject}>
                 Decline
@@ -537,8 +573,7 @@ export default function DealDetailPage() {
                   <h2 className="mb-4 text-xl font-bold">Deal Summary</h2>
                   <p className="text-gray-700 leading-relaxed">
                     {emailAnalysis?.summary ||
-                      `${getCompanyName()} is a ${
-                        emailAnalysis?.sector || "SaaS"
+                      `${getCompanyName()} is a ${emailAnalysis?.sector || "SaaS"
                       } company seeking funding. ${emailData.content.substring(
                         0,
                         200
@@ -557,15 +592,14 @@ export default function DealDetailPage() {
                     {getCompetitiveAnalysis().map((point, index) => (
                       <div key={index} className="flex items-start gap-2">
                         <div
-                          className={`mt-1 h-2 w-2 rounded-full ${
-                            point.toLowerCase().includes("advantage") ||
+                          className={`mt-1 h-2 w-2 rounded-full ${point.toLowerCase().includes("advantage") ||
                             point.toLowerCase().includes("strength")
-                              ? "bg-emerald-500"
-                              : point.toLowerCase().includes("weakness") ||
-                                point.toLowerCase().includes("challenge")
+                            ? "bg-emerald-500"
+                            : point.toLowerCase().includes("weakness") ||
+                              point.toLowerCase().includes("challenge")
                               ? "bg-red-500"
                               : "bg-blue-500"
-                          }`}
+                            }`}
                         />
                         <p className="text-sm text-gray-600">{point}</p>
                       </div>
@@ -580,8 +614,7 @@ export default function DealDetailPage() {
                   <h2 className="mb-4 text-xl font-bold">Market Research</h2>
                   <p className="text-gray-700 leading-relaxed">
                     {emailAnalysis?.marketResearch ||
-                      `The ${
-                        emailAnalysis?.sector || "SaaS"
+                      `The ${emailAnalysis?.sector || "SaaS"
                       } market is projected to grow by 15% annually. Market trends indicate strong potential for innovative solutions in this space.`}
                   </p>
                 </CardContent>

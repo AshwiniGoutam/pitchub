@@ -525,7 +525,7 @@ const fetchAllEmails = async (): Promise<any[]> => {
     
     console.log('🔍 Fetching ALL emails for quality deal flow calculation...');
     
-    const res = await fetch(`${baseUrl}/api/gmail?limit=100&sort=newest`, {
+    const res = await fetch(`${baseUrl}/api/gmail?limit=10&sort=newest`, {
       cache: 'no-store',
       headers: {
         'Content-Type': 'application/json',
