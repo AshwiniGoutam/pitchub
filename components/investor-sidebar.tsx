@@ -50,7 +50,7 @@ export function InvestorSidebar() {
     <div className="flex h-screen w-64 flex-col border-r bg-white">
       {/* Logo */}
       <div className="flex h-16 items-center gap-2 border-b px-6">
-        <img src="/images/logo.png" alt="logo" width="120px" />
+        {/* <img src="/images/logo.png" alt="logo" width="120px" /> */}
       </div>
 
       {/* Navigation */}

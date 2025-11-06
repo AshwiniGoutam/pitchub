@@ -4,6 +4,29 @@ import { ThesisManager, type InvestorThesis } from "@/lib/matching-engine";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
 
+
+// ✅ Reusable helper (used internally in Gmail API)
+export async function getInvestorThesisByEmail(userEmail: string) {
+  const db = await getDatabase();
+  const investor = await db.collection("users").findOne({ email: userEmail });
+
+  if (!investor || !investor.investorProfile) {
+    return ThesisManager.getDefaultThesis();
+  }
+
+  return {
+    sectors: investor.investorProfile.sectors || [],
+    stages: investor.investorProfile.stagePreference || [],
+    checkSizeMin: investor.investorProfile.checkSize?.min || 0,
+    checkSizeMax: investor.investorProfile.checkSize?.max || 0,
+    geographies: investor.investorProfile.geographies || [],
+    keywords: investor.investorProfile.keywords || [],
+    excludedKeywords: investor.investorProfile.excludedKeywords || [],
+  };
+}
+
+
+
 // GET investor thesis
 export async function GET(request: NextRequest) {
   try {

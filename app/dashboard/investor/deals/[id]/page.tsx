@@ -88,101 +88,61 @@ export default function DealDetailPage() {
   // console.log('emailData', AnalysisData?.requestData);
 
 
-  // Fetch email data based on ID
-  useEffect(() => {
-    async function fetchEmailData() {
-      try {
-        const emailId = params.id as string;
+  async function fetchEmailData() {
+    try {
+      const emailId = params.id as string;
+      const res = await fetch(`/api/gmail/${emailId}`);
+      if (!res.ok) throw new Error("Failed to fetch email");
 
-        // Fetch all emails without pagination to find the specific one
-        const res = await fetch("/api/gmail?page=1&limit=1000"); // Large limit to get all emails
-        if (!res.ok) throw new Error("Failed to fetch emails");
-        const data: EmailsResponse = await res.json();
+      const email = await res.json();
+      setEmailData(email);
 
-        const foundEmail = data.emails.find(
-          (email: EmailData) => email.id === emailId
-        );
-        if (foundEmail) {
-          setEmailData(foundEmail);
+      // Fetch AI analysis directly for this single email
+      const analysisRes = await fetch("/api/process-all-emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: [email] }),
+      });
 
-          // Fetch analysis for this email
-          const analysisRes = await fetch("/api/process-all-emails", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ emails: [foundEmail] }),
-          });
+      if (analysisRes.ok) {
+        const analysisData = await analysisRes.json();
+        const analysis = analysisData.analyses?.[0]?.analysis;
 
-          if (analysisRes.ok) {
-            const analysisData = await analysisRes.json();
-            if (analysisData.analyses && analysisData.analyses.length > 0) {
-              // Ensure the analysis has all required fields with fallbacks
-              setAnalysisData(analysisData.analyses[0])
-              const analysis = analysisData.analyses[0].analysis;
-              setEmailAnalysis({
-                summary: analysis.summary || "No summary available.",
-                sector: analysis.sector || "SaaS",
-                competitiveAnalysis: Array.isArray(analysis.competitiveAnalysis)
-                  ? analysis.competitiveAnalysis
-                  : [
-                    "Higher efficiency than current market leaders.",
-                    "Manufacturing costs are currently higher.",
-                  ],
-                marketResearch:
-                  analysis.marketResearch || "Market analysis not available.",
-                fundingMentioned: analysis.fundingMentioned || false,
-                growthStage: analysis.growthStage || "Early",
-              });
-            } else {
-              // Set default analysis if none returned
-              setEmailAnalysis({
-                summary: "Analysis in progress...",
-                sector: "SaaS",
-                competitiveAnalysis: [
-                  "Higher efficiency than current market leaders.",
-                  "Manufacturing costs are currently higher.",
-                ],
-                marketResearch:
-                  "The SaaS market is projected to grow by 15% annually.",
-                fundingMentioned: false,
-                growthStage: "Early",
-              });
-            }
-          } else {
-            // Set default analysis if API call fails
-            setEmailAnalysis({
-              summary: "Unable to generate analysis at this time.",
-              sector: "SaaS",
-              competitiveAnalysis: [
-                "Higher efficiency than current market leaders.",
-                "Manufacturing costs are currently higher.",
-              ],
-              marketResearch: "Market analysis not available.",
-              fundingMentioned: false,
-              growthStage: "Early",
-            });
-          }
-        } else {
-          console.error("Email not found with ID:", emailId);
-        }
-      } catch (err) {
-        console.error("Error fetching email data:", err);
-        // Set default analysis on error
+        setAnalysisData(analysisData.analyses?.[0] || {});
         setEmailAnalysis({
-          summary: "Error loading analysis.",
-          sector: "SaaS",
-          competitiveAnalysis: [
+          summary: analysis?.summary || "No summary available.",
+          sector: analysis?.sector || "SaaS",
+          competitiveAnalysis: analysis?.competitiveAnalysis || [
             "Higher efficiency than current market leaders.",
             "Manufacturing costs are currently higher.",
           ],
-          marketResearch: "Market analysis not available.",
-          fundingMentioned: false,
-          growthStage: "Early",
+          marketResearch:
+            analysis?.marketResearch || "Market analysis not available.",
+          fundingMentioned: analysis?.fundingMentioned || false,
+          growthStage: analysis?.growthStage || "Early",
         });
-      } finally {
-        setLoading(false);
       }
+    } catch (err) {
+      console.error("Error fetching email data:", err);
+      setEmailAnalysis({
+        summary: "Error loading analysis.",
+        sector: "SaaS",
+        competitiveAnalysis: [
+          "Higher efficiency than current market leaders.",
+          "Manufacturing costs are currently higher.",
+        ],
+        marketResearch: "Market analysis not available.",
+        fundingMentioned: false,
+        growthStage: "Early",
+      });
+    } finally {
+      setLoading(false);
     }
+  }
 
+
+  // Fetch email data based on ID
+  useEffect(() => {
     if (params.id) {
       fetchEmailData();
     }
@@ -313,10 +273,7 @@ export default function DealDetailPage() {
     return emailAnalysis.competitiveAnalysis.slice(0, 3);
   };
 
-  const handleAction = async (action: string, extraData = {}) => {
-    // console.log(emailData);
-    // return
-
+  const handleAction = async (action, extraData = {}) => {
     if (!emailData) return;
     try {
       const res = await fetch("/api/process-all-emails/analyze", {
@@ -329,27 +286,11 @@ export default function DealDetailPage() {
           ...extraData,
         }),
       });
+
       if (res.ok) {
         const data = await res.json();
-        setEmailAnalysis(data?.analyses?.[0]?.analysis || null);
-        // alert(`${action.replace("_", " ")} successful!`);
-        // console.log(data);
 
-        if (action === "request_data") {
-          await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/send-email`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              to: "ashwanigoutam16@gmail.com",
-              subject: `Data Request from ${session?.user?.email || "a user"}`,
-              body: `
-                Hi,
-                ${session?.user?.email || "A user"} has requested access to data.
-                Please review and provide the required data at your earliest convenience.
-                – ${session?.user?.name}`,
-            }),
-          });
-        }
+        fetchEmailData()
       } else {
         alert("Action failed. Try again.");
       }
@@ -358,6 +299,7 @@ export default function DealDetailPage() {
       alert("Something went wrong.");
     }
   };
+
 
   const handleScheduleMeeting = () => {
     const meetingDetails = {
@@ -369,11 +311,7 @@ export default function DealDetailPage() {
     handleAction("schedule_meeting", { meetingDetails });
   };
 
-  const handleRequestData = () => {
-    const requestData = {
-      type: "Financials, Growth Metrics",
-      deadline: "2025-11-10",
-    };
+  const handleRequestData = (requestData) => {
     handleAction("request_data", { requestData });
   };
 
@@ -430,6 +368,7 @@ export default function DealDetailPage() {
         open={requestModalOpen}
         onOpenChange={setRequestModalOpen}
         onSubmit={handleRequestData}
+        emailId={emailData?.gmailId}
       />
 
       <div className="flex-1 overflow-auto">
@@ -499,15 +438,16 @@ export default function DealDetailPage() {
                 Schedule Meeting
               </Button>
               <Button
-                className="bg-emerald-600"
+                // className="bg-emerald-600"
                 onClick={() => setRequestModalOpen(true)}
+                variant="outline"
                 disabled={AnalysisData?.requestData}
               >
                 {AnalysisData?.requestData ? "Data Requested" : "Request Data"}
               </Button>
-              <Button variant="outline" onClick={handleReject}>
+              {/* <Button variant="outline" onClick={handleReject}>
                 Decline
-              </Button>
+              </Button> */}
             </div>
           </div>
 
@@ -639,35 +579,35 @@ export default function DealDetailPage() {
 
             {/* Right Column - 1/3 width */}
             <div className="space-y-6">
-              <Card className="py-1">
+              <Card className="py-1 sticky top-20">
                 <CardContent className="p-6">
                   <h2 className="mb-4 text-xl font-bold">Key Information</h2>
                   <div className="space-y-4">
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Sector</span>
-                      <span className="font-medium">
+                      <span className="font-medium text-right">
                         {emailAnalysis?.sector || "SaaS"}
                       </span>
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Stage</span>
-                      <span className="font-medium">{getFundingStage()}</span>
+                      <span className="font-medium text-right">{getFundingStage()}</span>
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Funding Requirement</span>
-                      <span className="font-medium">$2M</span>
+                      <span className="font-medium text-right">$2M</span>
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Valuation</span>
-                      <span className="font-medium">$10M</span>
+                      <span className="font-medium text-right">$10M</span>
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Lead Investor</span>
-                      <span className="font-medium">Not disclosed</span>
+                      <span className="font-medium text-right">Not disclosed</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Contact</span>
-                      <span className="font-medium">{emailData.from}</span>
+                      <span className="font-medium text-right">{emailData.from}</span>
                     </div>
                   </div>
                 </CardContent>

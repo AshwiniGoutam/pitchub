@@ -1,6 +1,9 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]/route";
 import { getDatabase } from "@/lib/mongodb";
+import { getInvestorThesisByEmail } from "../investor/thesis/route";
+
+export const dynamic = "force-dynamic";
 
 // ------------------ Enhanced Utils ------------------
 
@@ -13,21 +16,21 @@ function decodeBase64Safe(base64String) {
       .replace(/_/g, '/')
       .replace(/\s/g, '')
       .replace(/[^A-Za-z0-9+/=]/g, '');
-    
+
     // Ensure the string length is a multiple of 4
     const paddedBase64 = cleanBase64.padEnd(cleanBase64.length + (4 - cleanBase64.length % 4) % 4, '=');
-    
+
     const buff = Buffer.from(paddedBase64, 'base64');
-    
+
     // Convert to string with proper error handling
     let decoded = buff.toString('utf-8');
-    
+
     // Remove any remaining invalid UTF-8 sequences
     decoded = decoded
       .replace(/[^\x00-\x7F]/g, '') // Remove non-ASCII characters
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
       .trim();
-    
+
     return decoded;
   } catch (error) {
     console.warn('Base64 decoding failed, returning empty string:', error.message);
@@ -37,7 +40,7 @@ function decodeBase64Safe(base64String) {
 
 function extractBodySafe(payload) {
   if (!payload) return "";
-  
+
   try {
     // Try to get data from body first
     if (payload.body?.data) {
@@ -70,7 +73,7 @@ function extractBodySafe(payload) {
   } catch (error) {
     console.warn('Error extracting body:', error.message);
   }
-  
+
   return "";
 }
 
@@ -108,7 +111,7 @@ function extractAttachmentsSafe(payload, messageId) {
 
 function cleanTextForMongoDB(text) {
   if (!text) return "";
-  
+
   try {
     return text
       .toString()
@@ -225,8 +228,8 @@ async function getExistingEmailSafe(collection, gmailId) {
     // Use projection to limit fields and avoid BSON parsing issues
     const existing = await collection.findOne(
       { gmailId },
-      { 
-        projection: { 
+      {
+        projection: {
           gmailId: 1,
           from: 1,
           fromEmail: 1,
@@ -243,7 +246,7 @@ async function getExistingEmailSafe(collection, gmailId) {
         }
       }
     );
-    
+
     if (existing) {
       return cleanEmailData(existing);
     }
@@ -278,26 +281,12 @@ export async function GET(request) {
     const offset = (page - 1) * limit;
 
     // Step 1: Fetch investor thesis
-    let thesis = { sectors: [], keywords: [], excludedKeywords: [], geographies: [] };
-    try {
-      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-      const thesisRes = await fetch(`${baseUrl}/api/investor/thesis`, {
-        headers: { 
-          Authorization: `Bearer ${session.accessToken}`,
-          'Content-Type': 'application/json'
-        },
-      });
-      if (thesisRes.ok) {
-        thesis = await thesisRes.json();
-      }
-    } catch (err) {
-      console.warn("⚠️ Thesis fetch failed, using default:", err.message);
-    }
+    const thesis = await getInvestorThesisByEmail(session.user.email);
 
     // Step 2: Fetch Gmail messages (90 days)
     const query = "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
     let allMessages = [];
-    
+
     try {
       const listRes = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}`,
@@ -343,7 +332,7 @@ export async function GET(request) {
             `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
             { headers: { Authorization: `Bearer ${session.accessToken}` } }
           );
-          
+
           if (!detailRes.ok) {
             console.warn(`Failed to fetch email ${msg.id}:`, detailRes.status);
             continue;
@@ -369,10 +358,10 @@ export async function GET(request) {
           const cleanedBody = cleanTextForMongoDB(rawBody);
           const sector = detectSector(fromEmail, cleanedSubject, cleanedBody);
           const status = defaultStatus(sector);
-          const relevanceScore = computeRelevance({ 
-            subject: cleanedSubject, 
-            content: cleanedBody, 
-            sector 
+          const relevanceScore = computeRelevance({
+            subject: cleanedSubject,
+            content: cleanedBody,
+            sector
           }, thesis);
 
           const newEmail = cleanEmailData({
@@ -413,7 +402,7 @@ export async function GET(request) {
 
         // Small delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 100));
-        
+
       } catch (error) {
         console.error(`Error processing email ${msg.id}:`, error);
         // Continue with next email instead of failing completely
@@ -432,13 +421,13 @@ export async function GET(request) {
     }));
 
     return new Response(
-      JSON.stringify({ 
-        emails: sanitized, 
-        total: allMessages.length, 
-        page, 
-        limit 
+      JSON.stringify({
+        emails: sanitized,
+        total: allMessages.length,
+        page,
+        limit
       }),
-      { 
+      {
         status: 200,
         headers: {
           'Content-Type': 'application/json; charset=utf-8'
@@ -448,10 +437,10 @@ export async function GET(request) {
 
   } catch (err) {
     console.error("🔥 Gmail API error:", err);
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
       error: "Internal server error",
       details: "Failed to process email data"
-    }), { 
+    }), {
       status: 500,
       headers: {
         'Content-Type': 'application/json; charset=utf-8'

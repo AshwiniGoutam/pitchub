@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CalendarDays } from "lucide-react";
 import React, { useState } from "react";
 
-export default function RequestDataDialog({ open, onOpenChange, onSubmit }) {
+export default function RequestDataDialog({ open, onOpenChange, onSubmit, emailId }) {
     const [selectedTypes, setSelectedTypes] = useState([]);
     const [note, setNote] = useState("");
     const [deadline, setDeadline] = useState("");
@@ -26,11 +26,13 @@ export default function RequestDataDialog({ open, onOpenChange, onSubmit }) {
 
     const handleSubmit = () => {
         const requestData = {
-            type: selectedTypes.join(", "),
+            emailId, // 👈 Include the target email
+            type: selectedTypes,
             note,
-            deadline: deadline || new Date().toISOString().split("T")[0],
         };
         onSubmit(requestData);
+        setSelectedTypes([]);
+        setNote("");
         onOpenChange(false);
     };
 
@@ -68,16 +70,6 @@ export default function RequestDataDialog({ open, onOpenChange, onSubmit }) {
                                 <span className="text-sm">{type}</span>
                             </label>
                         ))}
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Deadline</label>
-                        <input
-                            type="date"
-                            value={deadline}
-                            onChange={(e) => setDeadline(e.target.value)}
-                            className="w-full border rounded-md p-2 text-sm"
-                        />
                     </div>
 
                     <div>
