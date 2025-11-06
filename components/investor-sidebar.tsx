@@ -24,8 +24,16 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard/investor", icon: LayoutDashboard },
   { name: "Inbox", href: "/dashboard/investor/inbox", icon: Inbox },
   { name: "Deals", href: "/dashboard/investor/startups", icon: Briefcase },
-  { name: "Pitch Connect", href: "/dashboard/investor/pitch-connect", icon: Mail },
-  { name: "Market Research", href: "/dashboard/investor/market-research", icon: TrendingUp },
+  {
+    name: "Pitch Connect",
+    href: "/dashboard/investor/pitch-connect",
+    icon: Mail,
+  },
+  {
+    name: "Market Research",
+    href: "/dashboard/investor/market-research",
+    icon: TrendingUp,
+  },
   { name: "Settings", href: "/dashboard/investor/settings", icon: Settings },
   {
     name: "Portfolio",
@@ -50,7 +58,7 @@ export function InvestorSidebar() {
     <div className="flex h-screen w-64 flex-col border-r bg-white">
       {/* Logo */}
       <div className="flex h-16 items-center gap-2 border-b px-6">
-        {/* <img src="/images/logo.png" alt="logo" width="120px" /> */}
+        <img src="/images/logo.png" alt="logo" width="120px" />
       </div>
 
       {/* Navigation */}

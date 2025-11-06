@@ -969,7 +969,7 @@ export default function InboxPage() {
                   {/* Pitch Deck Tab */}
                   <TabsContent value="pitch-deck" className="space-y-6">
                     {/* Pitch Deck Preview */}
-                    <Card>
+                    {/* <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg">
                           <FileText className="h-5 w-5 text-blue-600" />
@@ -981,10 +981,10 @@ export default function InboxPage() {
                           <p className="text-gray-400">Pitch Deck Preview</p>
                         </div>
                       </CardContent>
-                    </Card>
+                    </Card> */}
 
                     {/* Executive Summary */}
-                    <Card>
+                    <Card className="mt-4">
                       <CardHeader>
                         <CardTitle className="text-lg">
                           Executive Summary
