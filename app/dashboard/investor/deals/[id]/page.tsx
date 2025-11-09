@@ -23,7 +23,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useSession } from "next-auth/react";
-import RequestDataModal from './requestDataModal'
+import RequestDataModal from "./requestDataModal";
 import RequestDataDialog from "./requestDataModal";
 
 interface EmailData {
@@ -80,13 +80,15 @@ export default function DealDetailPage() {
   const [emailAnalysis, setEmailAnalysis] = useState<EmailAnalysis | null>(
     null
   );
-  const [AnalysisData, setAnalysisData] = useState('')
+  const [AnalysisData, setAnalysisData] = useState("");
   const [loading, setLoading] = useState(true);
   const [attachmentModalOpen, setAttachmentModalOpen] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [loadingAction, setLoadingAction] = useState("");
 
   // console.log('emailData', AnalysisData?.requestData);
 
+  console.log("AnalysisData?.requestData?._id", AnalysisData?.requestData?._id);
 
   async function fetchEmailData() {
     try {
@@ -101,7 +103,10 @@ export default function DealDetailPage() {
       const analysisRes = await fetch("/api/process-all-emails", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emails: [email] }),
+        body: JSON.stringify({
+          emails: [email],
+          userEmail: emailId,
+        }),
       });
 
       if (analysisRes.ok) {
@@ -139,7 +144,6 @@ export default function DealDetailPage() {
       setLoading(false);
     }
   }
-
 
   // Fetch email data based on ID
   useEffect(() => {
@@ -234,10 +238,10 @@ export default function DealDetailPage() {
       return emailAnalysis.growthStage === "Early"
         ? "Seed"
         : emailAnalysis.growthStage === "Expansion"
-          ? "Series A"
-          : emailAnalysis.growthStage === "Mature"
-            ? "Series B+"
-            : "Seed";
+        ? "Series A"
+        : emailAnalysis.growthStage === "Mature"
+        ? "Series B+"
+        : "Seed";
     }
     return "Seed";
   };
@@ -275,7 +279,10 @@ export default function DealDetailPage() {
 
   const handleAction = async (action, extraData = {}) => {
     if (!emailData) return;
+
     try {
+      setLoadingAction(action);
+      const emailId = params.id as string;
       const res = await fetch("/api/process-all-emails/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -283,43 +290,51 @@ export default function DealDetailPage() {
           emails: [emailData],
           action,
           note: notes,
+          userEmail: emailId,
+          accessToken: session?.accessToken, // ✅ include Google token
           ...extraData,
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
+        setLoadingAction("");
+        setRequestModalOpen(false)
+        if (action === "schedule_meeting") {
+          const meetLink =
+            data?.analyses?.[0]?.meetingDetails?.meetLink ||
+            "Meeting link not found.";
+          alert(`✅ Meeting scheduled!\n${meetLink}`);
+        }
 
-        fetchEmailData()
+        fetchEmailData();
       } else {
-        alert("Action failed. Try again.");
+        alert("❌ Action failed. Try again.");
+        setLoadingAction("");
       }
     } catch (err) {
       console.error(err);
-      alert("Something went wrong.");
+      setLoadingAction("");
+      alert("⚠️ Something went wrong.");
     }
   };
 
-
   const handleScheduleMeeting = () => {
     const meetingDetails = {
-      date: new Date().toISOString().split("T")[0],
-      time: "16:00",
-      platform: "Google Meet",
-      link: "https://meet.google.com/example",
+      summary: "Discussion about project proposal",
+      description: "Auto-created via AI email analysis",
+      attendees: ["client@example.com"], // ✅ you can dynamically pass email from emailData
+      startTime: new Date(Date.now() + 10 * 60000).toISOString(), // starts in 10 mins
+      endTime: new Date(Date.now() + 40 * 60000).toISOString(), // ends in 40 mins
     };
+
     handleAction("schedule_meeting", { meetingDetails });
   };
 
   const handleRequestData = (requestData) => {
-    handleAction("request_data", { requestData });
-  };
+    console.log(requestData);
 
-  const handleReject = async () => {
-    // Send rejection mail logic (server handles sending)
-    await handleAction("reject", {
-      reason: "Not aligned with current thesis.",
-    });
+    handleAction("request_data", { requestData }, requestData?.emailId);
   };
 
   if (loading) {
@@ -369,6 +384,7 @@ export default function DealDetailPage() {
         onOpenChange={setRequestModalOpen}
         onSubmit={handleRequestData}
         emailId={emailData?.gmailId}
+        loadingAction={loadingAction}
       />
 
       <div className="flex-1 overflow-auto">
@@ -416,16 +432,17 @@ export default function DealDetailPage() {
                 Seeking $2M
               </p>
               <Badge
-                className={`mt-2 ${emailData?.status == "Contacted"
-                  ? "bg-blue-100 text-blue-700"
-                  : emailData?.status == "Under Evaluation"
+                className={`mt-2 ${
+                  emailData?.status == "Contacted"
+                    ? "bg-blue-100 text-blue-700"
+                    : emailData?.status == "Under Evaluation"
                     ? "bg-yellow-100 text-yellow-700"
                     : emailData?.status == "Pending"
-                      ? "bg-red-100 text-red-700"
-                      : emailData?.status == "New"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : ""
-                  }`}
+                    ? "bg-red-100 text-red-700"
+                    : emailData?.status == "New"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : ""
+                }`}
               >
                 {emailData.status}
               </Badge>
@@ -513,7 +530,8 @@ export default function DealDetailPage() {
                   <h2 className="mb-4 text-xl font-bold">Deal Summary</h2>
                   <p className="text-gray-700 leading-relaxed">
                     {emailAnalysis?.summary ||
-                      `${getCompanyName()} is a ${emailAnalysis?.sector || "SaaS"
+                      `${getCompanyName()} is a ${
+                        emailAnalysis?.sector || "SaaS"
                       } company seeking funding. ${emailData.content.substring(
                         0,
                         200
@@ -532,14 +550,15 @@ export default function DealDetailPage() {
                     {getCompetitiveAnalysis().map((point, index) => (
                       <div key={index} className="flex items-start gap-2">
                         <div
-                          className={`mt-1 h-2 w-2 rounded-full ${point.toLowerCase().includes("advantage") ||
+                          className={`mt-1 h-2 w-2 rounded-full ${
+                            point.toLowerCase().includes("advantage") ||
                             point.toLowerCase().includes("strength")
-                            ? "bg-emerald-500"
-                            : point.toLowerCase().includes("weakness") ||
-                              point.toLowerCase().includes("challenge")
+                              ? "bg-emerald-500"
+                              : point.toLowerCase().includes("weakness") ||
+                                point.toLowerCase().includes("challenge")
                               ? "bg-red-500"
                               : "bg-blue-500"
-                            }`}
+                          }`}
                         />
                         <p className="text-sm text-gray-600">{point}</p>
                       </div>
@@ -554,7 +573,8 @@ export default function DealDetailPage() {
                   <h2 className="mb-4 text-xl font-bold">Market Research</h2>
                   <p className="text-gray-700 leading-relaxed">
                     {emailAnalysis?.marketResearch ||
-                      `The ${emailAnalysis?.sector || "SaaS"
+                      `The ${
+                        emailAnalysis?.sector || "SaaS"
                       } market is projected to grow by 15% annually. Market trends indicate strong potential for innovative solutions in this space.`}
                   </p>
                 </CardContent>
@@ -591,7 +611,9 @@ export default function DealDetailPage() {
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Stage</span>
-                      <span className="font-medium text-right">{getFundingStage()}</span>
+                      <span className="font-medium text-right">
+                        {getFundingStage()}
+                      </span>
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Funding Requirement</span>
@@ -603,11 +625,15 @@ export default function DealDetailPage() {
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Lead Investor</span>
-                      <span className="font-medium text-right">Not disclosed</span>
+                      <span className="font-medium text-right">
+                        Not disclosed
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Contact</span>
-                      <span className="font-medium text-right">{emailData.from}</span>
+                      <span className="font-medium text-right">
+                        {emailData.from}
+                      </span>
                     </div>
                   </div>
                 </CardContent>

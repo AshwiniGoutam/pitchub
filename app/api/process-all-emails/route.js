@@ -3,13 +3,15 @@ import { getDatabase } from "@/lib/mongodb";
 
 export async function POST(request) {
   try {
-    const { emails, action, note, meetingDetails, requestData } = await request.json();
+    const { emails, action, note, meetingDetails, requestData, userEmail } = await request.json();
 
     if (!emails || !Array.isArray(emails)) {
       return Response.json({ error: "Emails array is required" }, { status: 400 });
     }
 
-    console.log(`Starting batch analysis for ${emails.length} emails...`);
+    if (!userEmail) {
+      return Response.json({ error: "userEmail is required" }, { status: 400 });
+    }
 
     const db = await getDatabase();
     const collection = db.collection("emailAnalyses");
@@ -17,42 +19,37 @@ export async function POST(request) {
 
     for (const email of emails) {
       try {
-        // Check if email record already exists
-        const existing = await collection.findOne({ emailId: email.id });
+        const existing = await collection.findOne({ emailId: email.id, userEmail });
 
-        // Only summarize if not already analyzed
         const analysis =
           existing?.analysis && Object.keys(existing.analysis).length > 0
             ? existing.analysis
             : await summarizeEmail(email.content);
 
-        // Merge new and existing data
-        const updatedRecord = {
+        const record = {
           ...existing,
+          userEmail,
           emailId: email.id,
           analysis,
           action: action || existing?.action || "none",
           note: note ?? existing?.note ?? "",
           meetingDetails: meetingDetails ?? existing?.meetingDetails ?? null,
           requestData: requestData ?? existing?.requestData ?? null,
-          createdAt: existing?.createdAt || new Date(),
           updatedAt: new Date(),
+          createdAt: existing?.createdAt || new Date(),
         };
 
-        // Save merged record
         await collection.updateOne(
-          { emailId: email.id },
-          { $set: updatedRecord },
+          { emailId: email.id, userEmail },
+          { $set: record },
           { upsert: true }
         );
 
-        analysisResults.push(updatedRecord);
-
-        // Small delay
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        analysisResults.push(record);
       } catch (error) {
         console.error(`Error analyzing email ${email.id}:`, error);
         analysisResults.push({
+          userEmail,
           emailId: email.id,
           analysis: { summary: "Analysis failed", sector: "Unknown" },
           action: "failed",
@@ -60,18 +57,9 @@ export async function POST(request) {
       }
     }
 
-    console.log("Batch analysis completed");
-
-    // Create confirmation message
-    let message = "Analysis completed successfully";
-    if (action === "request_data") message = "Data request recorded successfully";
-    else if (action === "schedule_meeting") message = "Meeting scheduled successfully";
-    else if (action === "add_note") message = "Note saved successfully";
-    else if (action === "reject") message = "Rejection email queued successfully";
-
     return Response.json({
       status: "completed",
-      message,
+      message: "Analysis completed successfully",
       analyses: analysisResults,
     });
   } catch (error) {

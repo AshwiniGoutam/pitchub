@@ -1,47 +1,125 @@
 import { summarizeEmail } from "../../../../lib/gemini";
 import { getDatabase } from "@/lib/mongodb";
+import { google } from "googleapis";
 
 export async function POST(request) {
   try {
-    const { emails, action, note, meetingDetails, requestData } = await request.json();
+    const {
+      emails,
+      action,
+      note,
+      meetingDetails,
+      requestData,
+      userEmail,
+      accessToken,
+    } = await request.json();
 
     if (!emails || !Array.isArray(emails)) {
       return Response.json({ error: "Emails array is required" }, { status: 400 });
+    }
+
+    if (!userEmail) {
+      return Response.json({ error: "userEmail is required" }, { status: 400 });
     }
 
     const db = await getDatabase();
     const collection = db.collection("emailAnalyses");
     const analysisResults = [];
 
+    let calendar = null;
+    if (action === "schedule_meeting" && accessToken) {
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: accessToken });
+      calendar = google.calendar({ version: "v3", auth: oauth2Client });
+    }
+
     for (const email of emails) {
       try {
-        const existing = await collection.findOne({ emailId: email.id });
+        const existing = await collection.findOne({ emailId: email.id, userEmail });
 
-        // Run summarize only if no analysis exists yet
         const analysis =
           existing?.analysis && Object.keys(existing.analysis).length > 0
             ? existing.analysis
             : await summarizeEmail(email.content);
 
-        // Merge new fields while preserving existing ones
-        const record = {
+        let meetingInfo = meetingDetails ?? existing?.meetingDetails ?? null;
+
+        if (action === "schedule_meeting" && calendar) {
+          try {
+            const startTime =
+              meetingDetails?.startTime || new Date().toISOString();
+            const endTime =
+              meetingDetails?.endTime ||
+              new Date(Date.now() + 30 * 60000).toISOString();
+
+            const event = {
+              summary: meetingDetails?.summary || "AI Scheduled Meeting",
+              description:
+                meetingDetails?.description ||
+                "This meeting was automatically created via email analysis.",
+              start: { dateTime: startTime },
+              end: { dateTime: endTime },
+              attendees:
+                meetingDetails?.attendees?.map((e) => ({ email: e })) || [],
+              conferenceData: {
+                createRequest: {
+                  requestId: `${email.id}-${Date.now()}`,
+                  conferenceSolutionKey: { type: "hangoutsMeet" },
+                },
+              },
+            };
+
+            const response = await calendar.events.insert({
+              calendarId: "primary",
+              resource: event,
+              conferenceDataVersion: 1,
+              sendUpdates: "all",
+            });
+
+            const meetLink =
+              response.data?.conferenceData?.entryPoints?.find(
+                (e) => e.entryPointType === "video"
+              )?.uri || response.data?.hangoutLink || null;
+
+            meetingInfo = {
+              meetLink,
+              eventId: response.data.id,
+              startTime,
+              endTime,
+              summary: event.summary,
+              attendees: meetingDetails?.attendees || [],
+            };
+
+            console.log("✅ Google Meet created:", meetLink);
+          } catch (err) {
+            console.error("❌ Google Meet creation failed:", err.message);
+          }
+        }
+
+        const updatedRecord = {
           ...existing,
+          userEmail,
           emailId: email.id,
           analysis,
           action: action || existing?.action || "none",
           note: note ?? existing?.note ?? "",
-          meetingDetails: meetingDetails ?? existing?.meetingDetails ?? null,
+          meetingDetails: meetingInfo,
           requestData: requestData ?? existing?.requestData ?? null,
-          updatedAt: new Date(),
           createdAt: existing?.createdAt || new Date(),
+          updatedAt: new Date(),
         };
 
-        await collection.updateOne({ emailId: email.id }, { $set: record }, { upsert: true });
-        analysisResults.push(record);
+        await collection.updateOne(
+          { emailId: email.id, userEmail },
+          { $set: updatedRecord },
+          { upsert: true }
+        );
 
+        analysisResults.push(updatedRecord);
       } catch (error) {
         console.error(`Error analyzing email ${email.id}:`, error);
         analysisResults.push({
+          userEmail,
           emailId: email.id,
           analysis: { summary: "Analysis failed", sector: "Unknown" },
           action: "failed",
@@ -49,9 +127,19 @@ export async function POST(request) {
       }
     }
 
-    return Response.json({ status: "completed", analyses: analysisResults });
+    return Response.json({
+      status: "completed",
+      message:
+        action === "schedule_meeting"
+          ? "Meeting scheduled successfully"
+          : "Analysis completed successfully",
+      analyses: analysisResults,
+    });
   } catch (error) {
     console.error("API Error:", error);
-    return Response.json({ error: "Failed to process emails", details: error.message }, { status: 500 });
+    return Response.json(
+      { error: "Failed to process emails", details: error.message },
+      { status: 500 }
+    );
   }
 }

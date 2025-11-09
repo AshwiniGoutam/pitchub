@@ -357,9 +357,9 @@ export default function Page() {
         <header className="sticky top-0 z-10 border-b bg-white">
           <div className="flex h-16 items-center justify-between px-8">
             <div>
-              <h1 className="text-2xl font-bold">Deals</h1>
+              <h1 className="text-2xl font-bold">Pitch Connect</h1>
               <p className="text-sm text-gray-600">
-                An overview of your deal flow activity.
+                An overview of your pitches.
               </p>
             </div>
           </div>

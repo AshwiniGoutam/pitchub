@@ -363,7 +363,7 @@ export default function InboxPage() {
       const res = await fetch("/api/process-all-emails", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emails: [email] }),
+        body: JSON.stringify({ emails: [email], userEmail: emailId }),
       });
 
       if (!res.ok) throw new Error("Failed to load email analysis");
