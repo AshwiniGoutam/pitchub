@@ -237,6 +237,14 @@ export default function InboxPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [emailsPerPage] = useState(10);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailContent, setEmailContent] = useState({
+    to: "",
+    subject: "",
+    body: "",
+  });
+  const [selectRejectedMail, setSelectRejectedMail] = useState(null);
+  const [RejectLoading, setRejectLoading] = useState(false);
 
   // React Query for investor thesis
   const { data: thesisData, isLoading: thesisLoading } = useQuery({
@@ -763,6 +771,46 @@ export default function InboxPage() {
     }
   };
 
+  const handleReject = async (email: string) => {
+    setRejectLoading(true);
+    try {
+      const res = await fetch("/api/deals/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(selectRejectedMail),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        const mailRes = await fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...emailContent,
+            startupId: selectRejectedMail?._id,
+          }),
+        });
+
+        if (mailRes.ok) {
+          setRejectLoading(false);
+          setIsEmailModalOpen(false);
+        }
+      }
+      if (!res.ok) throw new Error(data?.error || "Failed to reject pitch");
+
+      toast.success("Pitch rejected successfully!");
+
+      // ✅ Refetch inbox data to update status
+      await refetch();
+
+      // ✅ Optionally close sidebar or clear selection
+      setSelectedEmail(null);
+    } catch (err: any) {
+      setRejectLoading(false);
+      toast.error(`Error rejecting pitch: ${err.message}`);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-50">
       <InvestorSidebar />
@@ -999,30 +1047,49 @@ export default function InboxPage() {
 
                     {/* Action Buttons */}
                     <div className="flex gap-3">
-                      {/* <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 cursor-pointer">
-                        Accept
-                      </Button> */}
-                      <Button
-                        className={`flex-1 cursor-pointer ${
-                          selectedEmail?.accepted
-                            ? "bg-green-600 hover:bg-green-700"
-                            : "bg-emerald-600 hover:bg-emerald-700"
-                        }`}
-                        onClick={() => acceptPitch(selectedEmail)}
-                        disabled={selectedEmail?.accepted || AccepingMail}
-                      >
-                        {selectedEmail?.accepted
-                          ? "Accepted"
-                          : AccepingMail
-                          ? "Accepting..."
-                          : "Accept"}
-                      </Button>
+                      {selectedEmail?.rejected == false && (
+                        <Button
+                          className={`flex-1 cursor-pointer ${
+                            selectedEmail?.accepted
+                              ? "bg-green-600 hover:bg-green-700"
+                              : "bg-emerald-600 hover:bg-emerald-700"
+                          }`}
+                          onClick={() => acceptPitch(selectedEmail)}
+                          disabled={selectedEmail?.accepted || AccepingMail}
+                        >
+                          {selectedEmail?.accepted
+                            ? "Accepted"
+                            : AccepingMail
+                            ? "Accepting..."
+                            : "Accept"}
+                        </Button>
+                      )}
 
                       <Button
                         variant="outline"
-                        className="flex-1 hover:bg-red-50 hover:text-red-700 cursor-pointer"
+                        className={
+                          selectedEmail?.rejected
+                            ? "flex-1 bg-red-700 text-white hover:bg-red-50 hover:text-red-700 cursor-pointer"
+                            : "flex-1 hover:bg-red-50 hover:text-red-700 cursor-pointer"
+                        }
+                        onClick={() => {
+                          setEmailContent({
+                            to: selectedEmail.fromEmail,
+                            subject: `Re: ${
+                              selectedEmail.subject || "Your pitch"
+                            }`,
+                            body: `Hi ${selectedEmail?.from},\n\nThank you for reaching out. After reviewing your pitch, we’ve decided not to move forward at this time.\n\nWe appreciate your effort and wish you success ahead.\n\nBest regards,\n[Your Name]`,
+                          });
+                          setIsEmailModalOpen(true);
+                          setSelectRejectedMail(selectedEmail);
+                        }}
+                        disabled={selectedEmail?.rejected}
                       >
-                        Reject
+                        {selectedEmail?.rejected
+                          ? "Rejected"
+                          : RejectLoading
+                          ? "Rejecting..."
+                          : "Reject"}
                       </Button>
                     </div>
 
@@ -1250,20 +1317,20 @@ export default function InboxPage() {
         <Dialog open={showSuccessPopup} onOpenChange={setShowSuccessPopup}>
           <DialogContent className="max-w-sm text-center">
             <DialogHeader>
-              <DialogTitle className="text-green-700">
-                🎉 Pitch Accepted
+              <DialogTitle className="text-green-700 text-center">
+                Pitch Accepted
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-center">
                 The pitch has been successfully accepted.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex justify-center gap-4 mt-6">
+            <div className="flex justify-center gap-4 mt-2">
               <Button
                 className="bg-green-600 hover:bg-green-700"
                 onClick={() => {
                   setShowSuccessPopup(false);
-                  router.push("/investor/deals"); // ✅ Redirect to deals page
+                  router.push("/dashboard/investor/startups"); // ✅ Redirect to deals page
                 }}
               >
                 View Deals
@@ -1274,6 +1341,75 @@ export default function InboxPage() {
               >
                 Cancel
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* mail model */}
+        {/* Reject Pitch Modal */}
+        <Dialog open={isEmailModalOpen} onOpenChange={setIsEmailModalOpen}>
+          <DialogContent className="max-w-lg w-full p-6 bg-white rounded shadow-xl">
+            <DialogHeader>
+              <DialogTitle>Reject Pitch</DialogTitle>
+              <DialogDescription>
+                Customize your rejection email before sending.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex flex-col gap-4 mt-4">
+              <div>
+                <label className="font-medium text-sm">To:</label>
+                <input
+                  type="email"
+                  value={emailContent.to}
+                  readOnly
+                  className="w-full border px-2 py-1 rounded"
+                />
+              </div>
+
+              <div>
+                <label className="font-medium text-sm">Subject:</label>
+                <input
+                  type="text"
+                  value={emailContent.subject}
+                  onChange={(e) =>
+                    setEmailContent({
+                      ...emailContent,
+                      subject: e.target.value,
+                    })
+                  }
+                  className="w-full border px-2 py-1 rounded"
+                />
+              </div>
+
+              <div>
+                <label className="font-medium text-sm">Body:</label>
+                <textarea
+                  rows={6}
+                  value={emailContent.body}
+                  onChange={(e) =>
+                    setEmailContent({ ...emailContent, body: e.target.value })
+                  }
+                  className="w-full border px-2 py-1 rounded"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsEmailModalOpen(false)}
+                  disabled={RejectLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                  onClick={handleReject}
+                  disabled={RejectLoading}
+                >
+                  {RejectLoading ? "Sending..." : "Send Rejection"}
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
