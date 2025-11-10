@@ -95,8 +95,10 @@ export default function Page() {
       startupStage: startup.stage,
       startupFunding: startup.fundingRequirement,
       startupLocation: startup.location,
+      thesis,
     });
 
+    // defensive default thesis
     if (!thesis || Object.keys(thesis).length === 0) {
       console.log("⚠️ No thesis available, using default score 50");
       return 50;
@@ -112,14 +114,12 @@ export default function Page() {
       keywords: 10,
     };
 
-    console.log("🎯 Thesis criteria:", {
-      sectors: thesis.sectors,
-      stages: thesis.stages,
-      checkSize: { min: thesis.checkSizeMin, max: thesis.checkSizeMax },
-      geographies: thesis.geographies,
-      keywords: thesis.keywords,
-      excludedKeywords: thesis.excludedKeywords,
-    });
+    // normalize numbers for thesis check sizes
+    const thesisMin = Number(thesis.checkSizeMin || 0);
+    const thesisMax =
+      thesis.checkSizeMax === undefined || thesis.checkSizeMax === null
+        ? Infinity
+        : Number(thesis.checkSizeMax);
 
     // Sector matching
     if (thesis.sectors && thesis.sectors.length > 0 && startup.sector) {
@@ -127,13 +127,7 @@ export default function Page() {
       const matchedSector = thesis.sectors.some(
         (sector) => sector.toLowerCase().trim() === startupSector
       );
-      console.log(
-        `🏢 Sector matching: ${startupSector} vs ${thesis.sectors} -> ${matchedSector}`
-      );
-      if (matchedSector) {
-        score += weights.sector;
-        console.log(`✅ Sector matched! +${weights.sector}`);
-      }
+      if (matchedSector) score += weights.sector;
       totalWeight += weights.sector;
     }
 
@@ -143,37 +137,31 @@ export default function Page() {
       const matchedStage = thesis.stages.some(
         (stage) => stage.toLowerCase().trim() === startupStage
       );
-      console.log(
-        `📈 Stage matching: ${startupStage} vs ${thesis.stages} -> ${matchedStage}`
-      );
-      if (matchedStage) {
-        score += weights.stage;
-        console.log(`✅ Stage matched! +${weights.stage}`);
-      }
+      if (matchedStage) score += weights.stage;
       totalWeight += weights.stage;
     }
 
-    // Funding range matching
+    // Funding range matching (handle number or object)
     if (
-      thesis.checkSizeMin !== undefined &&
-      thesis.checkSizeMax !== undefined &&
+      (thesisMin !== undefined || thesisMax !== undefined) &&
       startup.fundingRequirement
     ) {
-      const startupMin = startup.fundingRequirement.min || 0;
-      const startupMax = startup.fundingRequirement.max || Infinity;
-      const thesisMin = thesis.checkSizeMin;
-      const thesisMax = thesis.checkSizeMax;
-
-      // Check if funding ranges overlap
-      const fundingOverlap = startupMin <= thesisMax && startupMax >= thesisMin;
-      console.log(
-        `💰 Funding matching: Startup ${startupMin}-${startupMax} vs Thesis ${thesisMin}-${thesisMax} -> ${fundingOverlap}`
-      );
-
-      if (fundingOverlap) {
-        score += weights.funding;
-        console.log(`✅ Funding matched! +${weights.funding}`);
+      // startup.fundingRequirement might be a number, or {min,max}
+      let startupMin = 0;
+      let startupMax = Infinity;
+      if (typeof startup.fundingRequirement === "number") {
+        startupMin = startup.fundingRequirement;
+        startupMax = startup.fundingRequirement;
+      } else {
+        startupMin = Number(startup.fundingRequirement?.min || 0);
+        startupMax =
+          startup.fundingRequirement?.max === undefined
+            ? Infinity
+            : Number(startup.fundingRequirement?.max);
       }
+
+      const fundingOverlap = startupMin <= thesisMax && startupMax >= thesisMin;
+      if (fundingOverlap) score += weights.funding;
       totalWeight += weights.funding;
     }
 
@@ -187,13 +175,7 @@ export default function Page() {
       const matchedGeo = thesis.geographies.some((geo) =>
         startupLocation.includes(geo.toLowerCase())
       );
-      console.log(
-        `🌍 Geography matching: ${startupLocation} vs ${thesis.geographies} -> ${matchedGeo}`
-      );
-      if (matchedGeo) {
-        score += weights.geography;
-        console.log(`✅ Geography matched! +${weights.geography}`);
-      }
+      if (matchedGeo) score += weights.geography;
       totalWeight += weights.geography;
     }
 
@@ -205,16 +187,7 @@ export default function Page() {
       );
       const keywordScore =
         (matchedKeywords.length / thesis.keywords.length) * weights.keywords;
-      console.log(
-        `🔤 Keyword matching: ${matchedKeywords.length}/${
-          thesis.keywords.length
-        } matched -> +${keywordScore.toFixed(1)}`
-      );
-
-      if (matchedKeywords.length > 0) {
-        score += keywordScore;
-        console.log(`✅ Keywords matched! +${keywordScore.toFixed(1)}`);
-      }
+      if (matchedKeywords.length > 0) score += keywordScore;
       totalWeight += weights.keywords;
     }
 
@@ -230,36 +203,37 @@ export default function Page() {
         description.includes(keyword.toLowerCase())
       );
       if (excludedMatches.length > 0) {
-        console.log(
-          `🚫 Excluded keywords found: ${excludedMatches} -> applying 30% penalty`
-        );
-        score *= 0.7; // 30% penalty for excluded keywords
+        score *= 0.7; // 30% penalty
         excludedPenalty = true;
       }
     }
 
-    // Calculate final score
     const finalScore =
       totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 50;
-    console.log(
-      `🎯 Final calculation: ${score}/${totalWeight} = ${finalScore}%${
-        excludedPenalty ? " (with penalty)" : ""
-      }`
-    );
-
-    // Ensure score is between 0-100
     return Math.min(100, Math.max(0, finalScore));
   };
 
-  const fetchStartups = async () => {
+  const fetchStartups = async (thesisParam = null) => {
     try {
       const res = await fetch("/api/investor/startups", { cache: "no-store" });
       const data = await res.json();
 
-      // Calculate relevancy scores for each startup
+      // choose the thesis passed in (from fetchInvestorThesis) or current state
+      const thesisToUse = thesisParam ||
+        investorThesis || {
+          sectors: [],
+          stages: [],
+          checkSizeMin: 0,
+          checkSizeMax: Infinity,
+          geographies: [],
+          keywords: [],
+          excludedKeywords: [],
+        };
+
+      // Calculate relevancy scores for each startup (pass thesis)
       const startupsWithScores = data.map((startup) => ({
         ...startup,
-        relevanceScore: calculateRelevancyScore(startup),
+        relevanceScore: calculateRelevancyScore(startup, thesisToUse),
       }));
 
       setStartups(startupsWithScores);
@@ -267,7 +241,6 @@ export default function Page() {
       console.error("Error fetching startups:", err);
     }
   };
-
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       month: "short",
