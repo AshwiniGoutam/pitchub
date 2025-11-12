@@ -1,6 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Bell, Calendar, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +23,7 @@ interface DashboardStats {
   newThisWeek: number;
   underReview: number;
   contacted: number;
+  deals?: { total?: number; growth?: number };
 }
 
 interface Startup {
@@ -29,10 +32,7 @@ interface Startup {
   sector: string;
   stage: string;
   location: string;
-  fundingRequirement: {
-    min: number;
-    max: number;
-  };
+  fundingRequirement: { min: number; max: number };
   relevanceScore: number;
   status: string;
   createdAt: string;
@@ -48,104 +48,94 @@ interface Email {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats>({
+
+  // ------------------ STATES ------------------
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sectorFilter, setSectorFilter] = useState("all");
+  const [stageFilter, setStageFilter] = useState("all");
+  const [filteredStartups, setFilteredStartups] = useState<Startup[]>([]);
+  const [sectorData, setSectorData] = useState<any[]>([]);
+
+  // ------------------ API FUNCTIONS ------------------
+  const fetchDashboardData = async () => {
+    const [statsRes, startupsRes] = await Promise.all([
+      fetch("/api/investor/stats"),
+      fetch("/api/investor/startups"),
+    ]);
+    const stats = await statsRes.json();
+    const startups = await startupsRes.json();
+    return { stats, startups };
+  };
+
+  const fetchEmails = async () => {
+    const res = await fetch("/api/gmail?limit=40&sort=newest");
+    if (!res.ok) throw new Error("Failed to fetch emails");
+    const data = await res.json();
+    return data.emails || [];
+  };
+
+  const fetchThesis = async () => {
+    const res = await fetch("/api/investor/thesis");
+    if (!res.ok) throw new Error("Failed to fetch thesis");
+    return res.json();
+  };
+
+  // ------------------ QUERIES ------------------
+  const {
+    data: dashboardData,
+    isLoading: isDashboardLoading,
+  } = useQuery({
+    queryKey: ["dashboardData"],
+    queryFn: fetchDashboardData,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  const {
+    data: emails = [],
+    isLoading: isEmailsLoading,
+  } = useQuery({
+    queryKey: ["emails"],
+    queryFn: fetchEmails,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const {
+    data: thesis,
+    isLoading: isThesisLoading,
+  } = useQuery({
+    queryKey: ["thesis"],
+    queryFn: fetchThesis,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isLoading = isDashboardLoading || isEmailsLoading || isThesisLoading;
+
+  const stats = dashboardData?.stats || {
     totalPitches: 0,
     newThisWeek: 0,
     underReview: 0,
     contacted: 0,
-  });
-  const [startups, setStartups] = useState<Startup[]>([]);
-  const [filteredStartups, setFilteredStartups] = useState<Startup[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sectorFilter, setSectorFilter] = useState("all");
-  const [stageFilter, setStageFilter] = useState("all");
-  const [isLoading, setIsLoading] = useState(true);
-  const [latestEmails, setLatestEmails] = useState<Email[]>([]);
-  const [thesis, setThesis] = useState(null);
-
-  useEffect(() => {
-    (async () => {
-      await Promise.all([
-        fetchDashboardData(),
-        fetchLatestEmails(),
-        fetchThesis(),
-      ]);
-    })();
-  }, []);
-
-  useEffect(() => {
-    filterStartups();
-  }, [startups, searchTerm, sectorFilter, stageFilter]);
-
-  // ✅ Fetch Dashboard Data
-  const fetchDashboardData = async () => {
-    try {
-      const [statsRes, startupsRes] = await Promise.all([
-        fetch("/api/investor/stats"),
-        fetch("/api/investor/startups"),
-      ]);
-
-      if (statsRes.ok) {
-        const statsData = await statsRes.json();
-        setStats(statsData);
-      }
-
-      if (startupsRes.ok) {
-        const startupsData = await startupsRes.json();
-        setStartups(startupsData);
-      }
-    } catch (error) {
-      console.error("❌ Error fetching dashboard data:", error);
-    } finally {
-      setIsLoading(false);
-    }
+    deals: { total: 0, growth: 0 },
   };
+  const startups = dashboardData?.startups || [];
 
-  const [AllEmails, setAllEmails] = useState("");
-
-  // ✅ Fetch Latest Emails
-  const fetchLatestEmails = async () => {
-    try {
-      const res = await fetch("/api/gmail?limit=40&sort=newest");
-      if (!res.ok) {
-        console.error(`❌ Failed to fetch latest emails: ${res.statusText}`);
-        return;
-      }
-
-      const data = await res.json();
-      const emails = data.emails || [];
-      setAllEmails(emails);
-      console.log(`✅ Fetched ${emails.length} latest emails`);
-      setLatestEmails(emails);
-    } catch (error) {
-      console.error("❌ Error fetching latest emails:", error);
-    }
-  };
-  const [sectorData, setSectorData] = useState<any[]>([]);
-
+  // ------------------ EFFECTS ------------------
   useEffect(() => {
-    if (!Array.isArray(AllEmails) || AllEmails.length === 0) return;
+    if (!Array.isArray(emails) || emails.length === 0) return;
 
     const aggregated = Object.values(
-      AllEmails.reduce((acc: any, curr: any) => {
+      emails.reduce((acc: any, curr: any) => {
         const sector = curr.sector || "Unknown";
-        if (!acc[sector]) {
-          acc[sector] = { name: sector, value: 0 };
-        }
+        if (!acc[sector]) acc[sector] = { name: sector, value: 0 };
         acc[sector].value += 1;
         return acc;
       }, {})
     );
-
     setSectorData(aggregated);
-  }, [AllEmails]);
+  }, [emails]);
 
-  console.log("sectorData", sectorData);
-
-  // ✅ Filter Startups
-  const filterStartups = () => {
+  useEffect(() => {
     let filtered = startups;
-
     if (searchTerm) {
       filtered = filtered.filter(
         (startup) =>
@@ -153,19 +143,16 @@ export default function DashboardPage() {
           startup.description.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-
     if (sectorFilter !== "all") {
       filtered = filtered.filter((startup) => startup.sector === sectorFilter);
     }
-
     if (stageFilter !== "all") {
       filtered = filtered.filter((startup) => startup.stage === stageFilter);
     }
-
     setFilteredStartups(filtered);
-  };
+  }, [startups, searchTerm, sectorFilter, stageFilter]);
 
-  // ✅ Helper for avatar initials
+  // ------------------ HELPERS ------------------
   const getInitials = (name: string) => {
     if (!name) return "NA";
     return name
@@ -176,21 +163,7 @@ export default function DashboardPage() {
       .slice(0, 2);
   };
 
-  const fetchThesis = async () => {
-    try {
-      const res = await fetch("/api/investor/thesis");
-      if (!res.ok) {
-        console.error("❌ Failed to fetch thesis");
-        return;
-      }
-
-      const data = await res.json();
-      setThesis(data);
-    } catch (error) {
-      console.error("❌ Error fetching thesis:", error);
-    }
-  };
-
+  // ------------------ LOADING STATE ------------------
   if (isLoading) {
     return (
       <div className="flex h-screen">
@@ -207,15 +180,10 @@ export default function DashboardPage() {
     );
   }
 
-  const data = [
-    { name: "FinTech", value: 35 },
-    { name: "HealthTech", value: 30 },
-    { name: "SaaS", value: 20 },
-    { name: "DeepTech", value: 15 },
-  ];
-
+  // ------------------ PIE COLORS ------------------
   const COLORS = ["#10B981", "#3B82F6", "#EAB308", "#EF4444"];
 
+  // ------------------ RENDER ------------------
   return (
     <>
       {thesis &&
@@ -241,9 +209,9 @@ export default function DashboardPage() {
             </Button>
           </div>
         )}
+
       <div className="flex h-screen bg-gray-50">
         <InvestorSidebar />
-
         <div className="flex-1 overflow-auto">
           {/* Header */}
           <header className="sticky top-0 z-10 border-b bg-white">
@@ -270,13 +238,11 @@ export default function DashboardPage() {
                   <CardTitle>Summary</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* Total Pitches */}
                   <div>
                     <p className="text-sm text-gray-500">Total Pitches</p>
                     <p className="text-4xl font-bold">{stats.totalPitches}</p>
                   </div>
 
-                  {/* Deals Summary */}
                   <div>
                     <div className="mb-2 flex items-center justify-between">
                       <p className="text-sm text-gray-500">Quality Deal Flow</p>
@@ -298,7 +264,6 @@ export default function DashboardPage() {
                       {stats.deals?.total ?? 0}
                     </p>
 
-                    {/* Simple line wave illustration */}
                     <div className="mt-4 h-16">
                       <svg viewBox="0 0 200 50" className="w-full">
                         <path
@@ -315,13 +280,11 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Reviewed */}
                   <div>
                     <p className="text-sm text-gray-500">Reviewed</p>
                     <p className="text-4xl font-bold">{stats.underReview}</p>
                   </div>
 
-                  {/* Contacted */}
                   <div>
                     <p className="text-sm text-gray-500">Contacted</p>
                     <p className="text-4xl font-bold">{stats.contacted}</p>
@@ -356,7 +319,6 @@ export default function DashboardPage() {
                             />
                           ))}
                         </Pie>
-
                         <Tooltip />
                         <Legend />
                       </PieChart>
@@ -382,9 +344,9 @@ export default function DashboardPage() {
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
-              {latestEmails.length > 0 ? (
+              {emails.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  {latestEmails.slice(0, 4).map((email) => (
+                  {emails.slice(0, 4).map((email) => (
                     <Card
                       key={email.id}
                       className="hover:shadow-md transition-shadow cursor-pointer"
