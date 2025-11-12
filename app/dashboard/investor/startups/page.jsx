@@ -31,6 +31,7 @@ export default function Page() {
   const [deals, setDeals] = useState([]);
   const [investorThesis, setInvestorThesis] = useState(null);
   const [debugInfo, setDebugInfo] = useState("");
+  const [dealsloading, setDealsLoading] = useState(false);
 
   useEffect(() => {
     console.log("Component mounted - fetching data...");
@@ -42,16 +43,16 @@ export default function Page() {
     try {
       console.log("🔄 Fetching investor thesis...");
       setDebugInfo("Fetching investor thesis...");
-      
+
       const res = await fetch("/api/investor/thesis");
       console.log("Thesis API response status:", res.status);
-      
+
       if (res.ok) {
         const thesis = await res.json();
         console.log("✅ Thesis fetched successfully:", thesis);
         setDebugInfo(`Thesis loaded: ${JSON.stringify(thesis).substring(0, 100)}...`);
         setInvestorThesis(thesis);
-        
+
         // Fetch startups after thesis is loaded
         await fetchStartups(thesis);
       } else {
@@ -162,7 +163,7 @@ export default function Page() {
       // Check if funding ranges overlap
       const fundingOverlap = startupMin <= thesisMax && startupMax >= thesisMin;
       console.log(`💰 Funding matching: Startup ${startupMin}-${startupMax} vs Thesis ${thesisMin}-${thesisMax} -> ${fundingOverlap}`);
-      
+
       if (fundingOverlap) {
         score += weights.funding;
         console.log(`✅ Funding matched! +${weights.funding}`);
@@ -200,7 +201,7 @@ export default function Page() {
       );
       const keywordScore = (matchedKeywords.length / thesis.keywords.length) * weights.keywords;
       console.log(`🔤 Keyword matching: ${matchedKeywords.length}/${thesis.keywords.length} matched -> +${keywordScore.toFixed(1)}`);
-      
+
       if (matchedKeywords.length > 0) {
         score += keywordScore;
         console.log(`✅ Keywords matched! +${keywordScore.toFixed(1)}`);
@@ -235,23 +236,25 @@ export default function Page() {
   };
 
   const fetchStartups = async (thesis = investorThesis) => {
+    setDealsLoading(true);
     try {
       console.log("🔄 Fetching startups...");
       setDebugInfo(prev => prev + "\nFetching startups...");
-      
+
       const res = await fetch("/api/investor/startups", { cache: "no-store" });
-      
+
       if (!res.ok) {
         throw new Error(`Failed to fetch startups: ${res.status}`);
       }
-      
+
       const data = await res.json();
       console.log(`✅ Startups fetched: ${data.length} startups`);
       setDebugInfo(prev => prev + `\nFound ${data.length} startups`);
+      setDealsLoading(false);
 
       // Use the provided thesis or fall back to state
       const thesisToUse = thesis || investorThesis;
-      
+
       // Calculate relevancy scores for each startup
       const startupsWithScores = data.map((startup) => ({
         ...startup,
@@ -262,12 +265,13 @@ export default function Page() {
         name: s.name,
         score: s.relevanceScore
       })));
-      
+
       setDebugInfo(prev => prev + `\nScores calculated: ${startupsWithScores.map(s => s.relevanceScore).join(', ')}`);
       setStartups(startupsWithScores);
     } catch (err) {
       console.error("❌ Error fetching startups:", err);
       setDebugInfo(prev => prev + `\nError: ${err.message}`);
+      setDealsLoading(false);
     }
   };
 
@@ -344,6 +348,23 @@ export default function Page() {
       <span className="text-gray-700">{value}</span>
     </div>
   );
+
+  // if (dealsloading) {
+  //   return (
+  //     <div className="flex h-screen">
+  //       <InvestorSidebar />
+  //       <div className="flex-1">
+
+  //         <div className="flex-1 flex items-center justify-center h-[90%]">
+  //           <div>
+  //             <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
+  //             <p className="text-xl">Loading Inbox...</p>
+  //           </div>
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -434,7 +455,12 @@ export default function Page() {
                 </div>
               ) : (
                 <div className="py-16 text-center text-gray-500 font-medium">
-                  No deals found.
+                  <div className="flex-1 flex h-[60vh] items-center justify-center">
+                    <div>
+                      <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
+                      <p className="text-xl">Loading Deals...</p>
+                    </div>
+                  </div>
                 </div>
               )
             ) : (

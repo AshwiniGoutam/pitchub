@@ -221,14 +221,14 @@ export default function Page() {
       // choose the thesis passed in (from fetchInvestorThesis) or current state
       const thesisToUse = thesisParam ||
         investorThesis || {
-          sectors: [],
-          stages: [],
-          checkSizeMin: 0,
-          checkSizeMax: Infinity,
-          geographies: [],
-          keywords: [],
-          excludedKeywords: [],
-        };
+        sectors: [],
+        stages: [],
+        checkSizeMin: 0,
+        checkSizeMax: Infinity,
+        geographies: [],
+        keywords: [],
+        excludedKeywords: [],
+      };
 
       // Calculate relevancy scores for each startup (pass thesis)
       const startupsWithScores = data.map((startup) => ({
@@ -339,14 +339,13 @@ export default function Page() {
         </header>
 
         <div className="p-8 max-w-7xl mx-auto">
-          <div className="flex items-center justify-end">
-            {/* Filter Dropdown */}
+          {/* <div className="flex items-center justify-end">
             <ConnectionFilterDropdown
               onChange={(value) => {
                 console.log("Selected connection type:", value);
               }}
             />
-          </div>
+          </div> */}
 
           <div className="py-8">
             {activeTab === "Pitch Connect" && filteredStartups.length > 0 ? (
@@ -471,7 +470,12 @@ export default function Page() {
               </div>
             ) : (
               <div className="py-16 text-center text-gray-500 font-medium">
-                No startups found for {activeTab}.
+                <div className="flex-1 flex h-[60vh] items-center justify-center">
+                  <div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
+                    <p className="text-xl">Loading Pitches...</p>
+                  </div>
+                </div>
               </div>
             )}
           </div>

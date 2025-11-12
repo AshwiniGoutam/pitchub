@@ -44,10 +44,10 @@ export async function POST(request) {
 
         let meetingInfo = meetingDetails ?? existing?.meetingDetails ?? null;
 
+        // === Handle meeting creation ===
         if (action === "schedule_meeting" && calendar) {
           try {
-            const startTime =
-              meetingDetails?.startTime || new Date().toISOString();
+            const startTime = meetingDetails?.startTime || new Date().toISOString();
             const endTime =
               meetingDetails?.endTime ||
               new Date(Date.now() + 30 * 60000).toISOString();
@@ -96,26 +96,41 @@ export async function POST(request) {
           }
         }
 
-        const updatedRecord = {
-          ...existing,
-          userEmail,
-          emailId: email.id,
-          analysis,
-          action: action || existing?.action || "none",
-          note: note ?? existing?.note ?? "",
-          meetingDetails: meetingInfo,
-          requestData: requestData ?? existing?.requestData ?? null,
-          createdAt: existing?.createdAt || new Date(),
-          updatedAt: new Date(),
+        // === Handle note appending ===
+        const newNoteText = typeof note === "object" ? note.note : note;
+
+        // Build base update data
+        const baseUpdate = {
+          $set: {
+            userEmail,
+            emailId: email.id,
+            analysis,
+            action: action || existing?.action || "none",
+            meetingDetails: meetingInfo,
+            requestData: requestData ?? existing?.requestData ?? null,
+            createdAt: existing?.createdAt || new Date(),
+            updatedAt: new Date(),
+          },
         };
+
+        // If new note provided, append instead of overwrite
+        if (newNoteText && newNoteText.trim() !== "") {
+          baseUpdate.$push = {
+            notes: {
+              text: newNoteText.trim(),
+              createdAt: new Date(),
+            },
+          };
+        }
 
         await collection.updateOne(
           { emailId: email.id, userEmail },
-          { $set: updatedRecord },
+          baseUpdate,
           { upsert: true }
         );
 
-        analysisResults.push(updatedRecord);
+        const updatedDoc = await collection.findOne({ emailId: email.id, userEmail });
+        analysisResults.push(updatedDoc);
       } catch (error) {
         console.error(`Error analyzing email ${email.id}:`, error);
         analysisResults.push({
@@ -126,6 +141,7 @@ export async function POST(request) {
         });
       }
     }
+
 
     return Response.json({
       status: "completed",

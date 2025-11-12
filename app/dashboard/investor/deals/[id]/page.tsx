@@ -85,10 +85,11 @@ export default function DealDetailPage() {
   const [attachmentModalOpen, setAttachmentModalOpen] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [loadingAction, setLoadingAction] = useState("");
+  const [notesLoading, setNotesLoading] = useState(false);
 
   // console.log('emailData', AnalysisData?.requestData);
 
-  console.log("AnalysisData?.requestData?._id", AnalysisData?.requestData?._id);
+  console.log("AnalysisData?.requestData?._id", AnalysisData);
 
   async function fetchEmailData() {
     try {
@@ -238,10 +239,10 @@ export default function DealDetailPage() {
       return emailAnalysis.growthStage === "Early"
         ? "Seed"
         : emailAnalysis.growthStage === "Expansion"
-        ? "Series A"
-        : emailAnalysis.growthStage === "Mature"
-        ? "Series B+"
-        : "Seed";
+          ? "Series A"
+          : emailAnalysis.growthStage === "Mature"
+            ? "Series B+"
+            : "Seed";
     }
     return "Seed";
   };
@@ -289,7 +290,7 @@ export default function DealDetailPage() {
         body: JSON.stringify({
           emails: [emailData],
           action,
-          note: notes,
+          // note: notes,
           userEmail: emailId,
           accessToken: session?.accessToken, // ✅ include Google token
           ...extraData,
@@ -300,6 +301,8 @@ export default function DealDetailPage() {
         const data = await res.json();
         setLoadingAction("");
         setRequestModalOpen(false)
+        setNotes("");
+        setNotesLoading(false);
         if (action === "schedule_meeting") {
           const meetLink =
             data?.analyses?.[0]?.meetingDetails?.meetLink ||
@@ -311,6 +314,7 @@ export default function DealDetailPage() {
       } else {
         alert("❌ Action failed. Try again.");
         setLoadingAction("");
+        setNotesLoading(false);
       }
     } catch (err) {
       console.error(err);
@@ -332,9 +336,16 @@ export default function DealDetailPage() {
   };
 
   const handleRequestData = (requestData) => {
-    console.log(requestData);
-
     handleAction("request_data", { requestData }, requestData?.emailId);
+  };
+
+  const handleNotes = () => {
+    setNotesLoading(true);
+    const note = {
+      emailId: emailData?.gmailId,
+      note: notes,
+    };
+    handleAction("save_notes", { note }, note?.emailId);
   };
 
   if (loading) {
@@ -432,17 +443,16 @@ export default function DealDetailPage() {
                 Seeking $2M
               </p>
               <Badge
-                className={`mt-2 ${
-                  emailData?.status == "Contacted"
-                    ? "bg-blue-100 text-blue-700"
-                    : emailData?.status == "Under Evaluation"
+                className={`mt-2 ${emailData?.status == "Contacted"
+                  ? "bg-blue-100 text-blue-700"
+                  : emailData?.status == "Under Evaluation"
                     ? "bg-yellow-100 text-yellow-700"
                     : emailData?.status == "Pending"
-                    ? "bg-red-100 text-red-700"
-                    : emailData?.status == "New"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : ""
-                }`}
+                      ? "bg-red-100 text-red-700"
+                      : emailData?.status == "New"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : ""
+                  }`}
               >
                 {emailData.status}
               </Badge>
@@ -530,8 +540,7 @@ export default function DealDetailPage() {
                   <h2 className="mb-4 text-xl font-bold">Deal Summary</h2>
                   <p className="text-gray-700 leading-relaxed">
                     {emailAnalysis?.summary ||
-                      `${getCompanyName()} is a ${
-                        emailAnalysis?.sector || "SaaS"
+                      `${getCompanyName()} is a ${emailAnalysis?.sector || "SaaS"
                       } company seeking funding. ${emailData.content.substring(
                         0,
                         200
@@ -550,15 +559,14 @@ export default function DealDetailPage() {
                     {getCompetitiveAnalysis().map((point, index) => (
                       <div key={index} className="flex items-start gap-2">
                         <div
-                          className={`mt-1 h-2 w-2 rounded-full ${
-                            point.toLowerCase().includes("advantage") ||
+                          className={`mt-1 h-2 w-2 rounded-full ${point.toLowerCase().includes("advantage") ||
                             point.toLowerCase().includes("strength")
-                              ? "bg-emerald-500"
-                              : point.toLowerCase().includes("weakness") ||
-                                point.toLowerCase().includes("challenge")
+                            ? "bg-emerald-500"
+                            : point.toLowerCase().includes("weakness") ||
+                              point.toLowerCase().includes("challenge")
                               ? "bg-red-500"
                               : "bg-blue-500"
-                          }`}
+                            }`}
                         />
                         <p className="text-sm text-gray-600">{point}</p>
                       </div>
@@ -573,12 +581,40 @@ export default function DealDetailPage() {
                   <h2 className="mb-4 text-xl font-bold">Market Research</h2>
                   <p className="text-gray-700 leading-relaxed">
                     {emailAnalysis?.marketResearch ||
-                      `The ${
-                        emailAnalysis?.sector || "SaaS"
+                      `The ${emailAnalysis?.sector || "SaaS"
                       } market is projected to grow by 15% annually. Market trends indicate strong potential for innovative solutions in this space.`}
                   </p>
                 </CardContent>
               </Card>
+
+              <Card className="shadow-sm border border-gray-200 rounded-xl">
+                <CardContent className="">
+                  <h2 className="mb-4 text-xl font-bold">Notes</h2>
+
+                  {Array.isArray(AnalysisData?.notes) && AnalysisData.notes.length > 0 ? (
+                    <ul className="list-none space-y-4 max-h-64 overflow-y-auto pr-2 custom-scroll">
+                      {[...AnalysisData.notes].reverse().map((note, index) => (
+                        <li
+                          key={index}
+                          className="bg-gray-50 rounded-lg p-3 border border-gray-200 hover:bg-gray-100 transition"
+                        >
+                          <p className="text-gray-800 text-sm leading-relaxed">
+                            {note?.text}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-2 text-right">
+                            {new Date(note?.createdAt).toLocaleString()}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="text-gray-500 italic text-sm bg-gray-50 p-4 rounded-lg border border-dashed border-gray-200">
+                      No notes available yet.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
 
               {/* Internal Notes */}
               <Card>
@@ -590,8 +626,8 @@ export default function DealDetailPage() {
                     onChange={(e) => setNotes(e.target.value)}
                     className="min-h-[150px] resize-none"
                   />
-                  <Button className="mt-4 bg-emerald-600 hover:bg-emerald-700">
-                    Save Notes
+                  <Button onClick={() => handleNotes("note")} className="mt-4 bg-emerald-600 hover:bg-emerald-700" disabled={notesLoading}>
+                    {notesLoading ? "Saving Notes..." : "Save Notes"}
                   </Button>
                 </CardContent>
               </Card>
