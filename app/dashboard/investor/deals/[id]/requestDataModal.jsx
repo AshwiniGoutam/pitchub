@@ -57,11 +57,13 @@ export default function RequestDataDialog({
 
           <div className="grid grid-cols-2 gap-3">
             {[
-              "Financials",
-              "Growth Metrics",
-              "User Statistics",
-              "Market Reports",
-              "Product Roadmap",
+              "Pitch DECK",
+              "MIS",
+              "Historicals",
+              "Financial Projections",
+              "Market Research",
+              "User co-horts",
+              "Roadmap",
             ].map((type) => (
               <label
                 key={type}
@@ -78,7 +80,7 @@ export default function RequestDataDialog({
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              Additional Notes
+              Additional Data
             </label>
             <Textarea
               value={note}
