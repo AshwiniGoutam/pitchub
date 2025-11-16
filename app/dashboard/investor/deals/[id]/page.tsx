@@ -324,7 +324,7 @@ export default function DealDetailPage() {
             }),
           });
 
-          alert("📩 Email sent requesting data");
+          // alert("📩 Email sent requesting data");
         }
 
         if (action === "schedule_meeting") {
