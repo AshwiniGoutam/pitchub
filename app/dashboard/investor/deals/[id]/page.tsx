@@ -86,6 +86,8 @@ export default function DealDetailPage() {
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [loadingAction, setLoadingAction] = useState("");
   const [notesLoading, setNotesLoading] = useState(false);
+  const [selectedTypes, setSelectedTypes] = useState([]);
+  const [note, setNote] = useState("");
 
   // console.log('emailData', AnalysisData?.requestData);
 
@@ -239,10 +241,10 @@ export default function DealDetailPage() {
       return emailAnalysis.growthStage === "Early"
         ? "Seed"
         : emailAnalysis.growthStage === "Expansion"
-          ? "Series A"
-          : emailAnalysis.growthStage === "Mature"
-            ? "Series B+"
-            : "Seed";
+        ? "Series A"
+        : emailAnalysis.growthStage === "Mature"
+        ? "Series B+"
+        : "Seed";
     }
     return "Seed";
   };
@@ -279,6 +281,9 @@ export default function DealDetailPage() {
   };
 
   const handleAction = async (action, extraData = {}) => {
+    // console.log(selectedTypes);
+    // return
+
     if (!emailData) return;
 
     try {
@@ -300,9 +305,28 @@ export default function DealDetailPage() {
       if (res.ok) {
         const data = await res.json();
         setLoadingAction("");
-        setRequestModalOpen(false)
+        setRequestModalOpen(false);
         setNotes("");
         setNotesLoading(false);
+
+        if (action === "request_data") {
+          await fetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: emailData.fromEmail,
+              subject: "Request for Additional Information",
+              body: `Hello,\n\nWe need the following details:\n\n${selectedTypes
+                .map((t) => `- ${t}`)
+                .join(
+                  "\n"
+                )}\n\nAdditional Notes:\n${note}\n\nRegards,\nInvestor Team`,
+            }),
+          });
+
+          alert("📩 Email sent requesting data");
+        }
+
         if (action === "schedule_meeting") {
           const meetLink =
             data?.analyses?.[0]?.meetingDetails?.meetLink ||
@@ -396,6 +420,10 @@ export default function DealDetailPage() {
         onSubmit={handleRequestData}
         emailId={emailData?.gmailId}
         loadingAction={loadingAction}
+        selectedTypes={selectedTypes}
+        setSelectedTypes={setSelectedTypes}
+        note={note}
+        setNote={setNote}
       />
 
       <div className="flex-1 overflow-auto">
@@ -443,16 +471,17 @@ export default function DealDetailPage() {
                 Seeking $2M
               </p>
               <Badge
-                className={`mt-2 ${emailData?.status == "Contacted"
-                  ? "bg-blue-100 text-blue-700"
-                  : emailData?.status == "Under Evaluation"
+                className={`mt-2 ${
+                  emailData?.status == "Contacted"
+                    ? "bg-blue-100 text-blue-700"
+                    : emailData?.status == "Under Evaluation"
                     ? "bg-yellow-100 text-yellow-700"
                     : emailData?.status == "Pending"
-                      ? "bg-red-100 text-red-700"
-                      : emailData?.status == "New"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : ""
-                  }`}
+                    ? "bg-red-100 text-red-700"
+                    : emailData?.status == "New"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : ""
+                }`}
               >
                 {emailData.status}
               </Badge>
@@ -540,7 +569,8 @@ export default function DealDetailPage() {
                   <h2 className="mb-4 text-xl font-bold">Deal Summary</h2>
                   <p className="text-gray-700 leading-relaxed">
                     {emailAnalysis?.summary ||
-                      `${getCompanyName()} is a ${emailAnalysis?.sector || "SaaS"
+                      `${getCompanyName()} is a ${
+                        emailAnalysis?.sector || "SaaS"
                       } company seeking funding. ${emailData.content.substring(
                         0,
                         200
@@ -559,14 +589,15 @@ export default function DealDetailPage() {
                     {getCompetitiveAnalysis().map((point, index) => (
                       <div key={index} className="flex items-start gap-2">
                         <div
-                          className={`mt-1 h-2 w-2 rounded-full ${point.toLowerCase().includes("advantage") ||
+                          className={`mt-1 h-2 w-2 rounded-full ${
+                            point.toLowerCase().includes("advantage") ||
                             point.toLowerCase().includes("strength")
-                            ? "bg-emerald-500"
-                            : point.toLowerCase().includes("weakness") ||
-                              point.toLowerCase().includes("challenge")
+                              ? "bg-emerald-500"
+                              : point.toLowerCase().includes("weakness") ||
+                                point.toLowerCase().includes("challenge")
                               ? "bg-red-500"
                               : "bg-blue-500"
-                            }`}
+                          }`}
                         />
                         <p className="text-sm text-gray-600">{point}</p>
                       </div>
@@ -581,7 +612,8 @@ export default function DealDetailPage() {
                   <h2 className="mb-4 text-xl font-bold">Market Research</h2>
                   <p className="text-gray-700 leading-relaxed">
                     {emailAnalysis?.marketResearch ||
-                      `The ${emailAnalysis?.sector || "SaaS"
+                      `The ${
+                        emailAnalysis?.sector || "SaaS"
                       } market is projected to grow by 15% annually. Market trends indicate strong potential for innovative solutions in this space.`}
                   </p>
                 </CardContent>
@@ -591,7 +623,8 @@ export default function DealDetailPage() {
                 <CardContent className="">
                   <h2 className="mb-4 text-xl font-bold">Notes</h2>
 
-                  {Array.isArray(AnalysisData?.notes) && AnalysisData.notes.length > 0 ? (
+                  {Array.isArray(AnalysisData?.notes) &&
+                  AnalysisData.notes.length > 0 ? (
                     <ul className="list-none space-y-4 max-h-64 overflow-y-auto pr-2 custom-scroll">
                       {[...AnalysisData.notes].reverse().map((note, index) => (
                         <li
@@ -615,7 +648,6 @@ export default function DealDetailPage() {
                 </CardContent>
               </Card>
 
-
               {/* Internal Notes */}
               <Card>
                 <CardContent className="p-6 py-1">
@@ -626,7 +658,11 @@ export default function DealDetailPage() {
                     onChange={(e) => setNotes(e.target.value)}
                     className="min-h-[150px] resize-none"
                   />
-                  <Button onClick={() => handleNotes("note")} className="mt-4 bg-emerald-600 hover:bg-emerald-700" disabled={notesLoading}>
+                  <Button
+                    onClick={() => handleNotes("note")}
+                    className="mt-4 bg-emerald-600 hover:bg-emerald-700"
+                    disabled={notesLoading}
+                  >
                     {notesLoading ? "Saving Notes..." : "Save Notes"}
                   </Button>
                 </CardContent>

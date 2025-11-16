@@ -17,9 +17,11 @@ export default function RequestDataDialog({
   onSubmit,
   emailId,
   loadingAction,
+  selectedTypes,
+  setSelectedTypes,
+  note,
+  setNote
 }) {
-  const [selectedTypes, setSelectedTypes] = useState([]);
-  const [note, setNote] = useState("");
   const [deadline, setDeadline] = useState("");
 
   const toggleType = (type) => {

@@ -28,8 +28,8 @@ async function refreshAccessToken(token: any) {
     return {
       ...token,
       accessToken: refreshedTokens.access_token,
-      accessTokenExpires: Date.now() + refreshedTokens.expires_in * 1000, // new expiry
-      refreshToken: refreshedTokens.refresh_token ?? token.refreshToken, // reuse old one if missing
+      accessTokenExpires: Date.now() + refreshedTokens.expires_in * 1000,
+      refreshToken: refreshedTokens.refresh_token ?? token.refreshToken,
     };
   } catch (error) {
     console.error("Error refreshing access token:", error);
@@ -42,12 +42,25 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+
       authorization: {
         params: {
-          scope:
-            "openid email profile https://www.googleapis.com/auth/gmail.readonly",
-          access_type: "offline", // ✅ Required to get refresh token
-          prompt: "consent", // ✅ Always ask for refresh token (first login)
+          // ⭐⭐⭐ FIXED SCOPES WITH CALENDAR PERMISSIONS ⭐⭐⭐
+          scope: [
+            "openid",
+            "profile",
+            "email",
+
+            // Gmail read access
+            "https://www.googleapis.com/auth/gmail.readonly",
+
+            // REQUIRED FOR GOOGLE MEET LINK CREATION
+            "https://www.googleapis.com/auth/calendar",
+            "https://www.googleapis.com/auth/calendar.events",
+          ].join(" "),
+
+          access_type: "offline", // REQUIRED for refresh token
+          prompt: "consent", // Forces Google to issue new token with new scopes
         },
       },
     }),
@@ -59,12 +72,14 @@ export const authOptions: NextAuthOptions = {
 
   callbacks: {
     async jwt({ token, account, user }) {
-      // 🧩 Initial login
+      // Initial login
       if (account && user) {
         const db = await getDatabase();
 
-        // Save / update user in DB
-        const existingUser = await db.collection("users").findOne({ email: user.email });
+        const existingUser = await db
+          .collection("users")
+          .findOne({ email: user.email });
+
         if (!existingUser) {
           await db.collection("users").insertOne({
             email: user.email,
@@ -85,7 +100,8 @@ export const authOptions: NextAuthOptions = {
                 picture: user.image,
                 provider: account.provider,
                 accessToken: account.access_token,
-                refreshToken: account.refresh_token ?? existingUser.refreshToken,
+                refreshToken:
+                  account.refresh_token ?? existingUser.refreshToken,
                 updatedAt: new Date(),
               },
             }
@@ -100,17 +116,18 @@ export const authOptions: NextAuthOptions = {
         };
       }
 
-      // 🕒 If the token is still valid, return it
+      // If token valid, return it
       if (Date.now() < (token.accessTokenExpires as number)) {
         return token;
       }
 
-      // 🪄 If expired, refresh token
+      // Refresh expired token
       return await refreshAccessToken(token);
     },
 
     async session({ session, token }) {
       session.accessToken = token.accessToken as string;
+      session.refreshToken = token.refreshToken as string;
       session.error = token.error;
       session.user = token.user;
       return session;
