@@ -1,98 +1,3 @@
-// import { getServerSession } from "next-auth/next";
-// import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-// import InboxClient from "./InboxClient";
-
-// async function getEmailsFromAPI(session: any, page: number, limit: number) {
-//   try {
-//     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-//     const response = await fetch(`${baseUrl}/api/gmail?page=${page}&limit=${limit}`, {
-//       headers: {
-//         Authorization: `Bearer ${session.accessToken}`,
-//         'Content-Type': 'application/json'
-//       },
-//       cache: 'no-store' // Don't cache to get fresh data
-//     });
-
-//     if (response.ok) {
-//       return await response.json();
-//     }
-//   } catch (error) {
-//     console.error("API fetch failed:", error);
-//   }
-
-//   return { emails: [], total: 0, page, limit };
-// }
-
-// async function getSectorsFromAPI(emails: any[]) {
-//   try {
-//     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-//     const response = await fetch(`${baseUrl}/api/predict-sectors`, {
-//       method: 'POST',
-//       headers: {
-//         'Content-Type': 'application/json'
-//       },
-//       body: JSON.stringify({ emails }),
-//       cache: 'no-store'
-//     });
-
-//     if (response.ok) {
-//       const data = await response.json();
-//       return data.sectors || [];
-//     }
-//   } catch (error) {
-//     console.error("Sectors API fetch failed:", error);
-//   }
-
-//   return emails.map((email: any) => ({
-//     emailId: email.id,
-//     sector: "General"
-//   }));
-// }
-
-// export default async function InboxPage({ searchParams }: { searchParams: { page?: string; limit?: string } }) {
-//   const session = await getServerSession(authOptions);
-
-//   if (!session) {
-//     return (
-//       <div className="flex h-screen bg-gray-50">
-//         <div className="flex-1 flex items-center justify-center">
-//           <div className="text-center">
-//             <h2 className="text-2xl font-bold text-gray-800 mb-4">Access Denied</h2>
-//             <p className="text-gray-600">Please log in to access your inbox.</p>
-//           </div>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   const page = parseInt(searchParams.page || "1");
-//   const limit = parseInt(searchParams.limit || "10");
-
-//   // Get emails from API
-//   const emailsData = await getEmailsFromAPI(session, page, limit);
-
-//   // Get sectors from API
-//   const sectorsData = await getSectorsFromAPI(emailsData.emails);
-
-//   // Convert to object for easy lookup
-//   const emailSectors = sectorsData.reduce((acc: Record<string, string>, item: any) => {
-//     acc[item.emailId] = item.sector;
-//     return acc;
-//   }, {});
-
-//   return (
-//     <InboxClient
-//       initialEmails={emailsData.emails}
-//       initialSectors={emailSectors}
-//       initialTotal={emailsData.total}
-//       initialPage={page}
-//       initialLimit={limit}
-//     />
-//   );
-// }
-
-// export const dynamic = 'force-dynamic';
-
 "use client";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -126,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import Loading from "./loading";
+import { useUser } from "@/context/UserContext";
 
 interface Email {
   id: string;
@@ -220,6 +126,8 @@ const fetchInvestorThesis = async (): Promise<InvestorThesis> => {
 
 export default function InboxPage() {
   const router = useRouter();
+  const { user } = useUser();
+  console.log("user", user);
 
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -609,12 +517,13 @@ export default function InboxPage() {
     return (
       <div
         key={index}
-        className={`flex items-center justify-between p-3 border rounded-lg transition-all duration-200 ${isDownloading
-          ? "bg-blue-50 border-blue-200"
-          : isDownloaded
+        className={`flex items-center justify-between p-3 border rounded-lg transition-all duration-200 ${
+          isDownloading
+            ? "bg-blue-50 border-blue-200"
+            : isDownloaded
             ? "bg-green-50 border-green-200"
             : "hover:bg-gray-50 cursor-pointer"
-          }`}
+        }`}
         onClick={() =>
           !isDownloading &&
           downloadAttachment(attachment, selectedEmail?.subject || "")
@@ -767,6 +676,7 @@ export default function InboxPage() {
       const payload = {
         analyses: [
           {
+            userEmail: user?.email,
             emailId: email.id,
             from: email.from,
             fromEmail: email.fromEmail,
@@ -774,6 +684,8 @@ export default function InboxPage() {
           },
         ],
       };
+      // console.log(payload);
+      // return;
 
       const res = await fetch("/api/deals", {
         method: "POST",
@@ -845,8 +757,9 @@ export default function InboxPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Inbox List - Fixed width that doesn't shrink */}
         <div
-          className={`${selectedEmail ? "w-2/3" : "w-full"
-            } overflow-auto border-r bg-white transition-all`}
+          className={`${
+            selectedEmail ? "w-2/3" : "w-full"
+          } overflow-auto border-r bg-white transition-all`}
         >
           {/* Header */}
           <header className="sticky top-0 z-10 border-b bg-white">
@@ -895,8 +808,9 @@ export default function InboxPage() {
                         key={email.id}
                         onClick={() => handleEmailSelect(email)}
                         onDoubleClick={() => handleEmailDoubleClick(email)}
-                        className={`cursor-pointer transition-colors hover:bg-gray-50 ${selectedEmail?.id === email.id ? "bg-emerald-50" : ""
-                          }`}
+                        className={`cursor-pointer transition-colors hover:bg-gray-50 ${
+                          selectedEmail?.id === email.id ? "bg-emerald-50" : ""
+                        }`}
                       >
                         <td className="px-4 py-4 text-sm font-medium text-gray-900 whitespace-nowrap truncate max-w-[200px]">
                           {email.from}
@@ -927,16 +841,17 @@ export default function InboxPage() {
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap">
                           <Badge
-                            className={`${email?.status == "Contacted"
-                              ? "bg-blue-100 text-blue-700"
-                              : email?.status == "Under Evaluation"
+                            className={`${
+                              email?.status == "Contacted"
+                                ? "bg-blue-100 text-blue-700"
+                                : email?.status == "Under Evaluation"
                                 ? "bg-yellow-100 text-yellow-700"
                                 : email?.status == "Pending"
-                                  ? "bg-red-100 text-red-700"
-                                  : email?.status == "New"
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : ""
-                              }`}
+                                ? "bg-red-100 text-red-700"
+                                : email?.status == "New"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : ""
+                            }`}
                           >
                             {email.status}
                           </Badge>
@@ -1073,18 +988,19 @@ export default function InboxPage() {
                     <div className="flex gap-3">
                       {selectedEmail?.rejected == false && (
                         <Button
-                          className={`flex-1 cursor-pointer ${selectedEmail?.accepted
-                            ? "bg-green-600 hover:bg-green-700"
-                            : "bg-emerald-600 hover:bg-emerald-700"
-                            }`}
+                          className={`flex-1 cursor-pointer ${
+                            selectedEmail?.accepted
+                              ? "bg-green-600 hover:bg-green-700"
+                              : "bg-emerald-600 hover:bg-emerald-700"
+                          }`}
                           onClick={() => acceptPitch(selectedEmail)}
                           disabled={selectedEmail?.accepted || AccepingMail}
                         >
                           {selectedEmail?.accepted
                             ? "Accepted"
                             : AccepingMail
-                              ? "Accepting..."
-                              : "Accept"}
+                            ? "Accepting..."
+                            : "Accept"}
                         </Button>
                       )}
 
@@ -1098,8 +1014,9 @@ export default function InboxPage() {
                         onClick={() => {
                           setEmailContent({
                             to: selectedEmail.fromEmail,
-                            subject: `Re: ${selectedEmail.subject || "Your pitch"
-                              }`,
+                            subject: `Re: ${
+                              selectedEmail.subject || "Your pitch"
+                            }`,
                             body: `Hi ${selectedEmail?.from},\n\nThank you for reaching out. After reviewing your pitch, we’ve decided not to move forward at this time.\n\nWe appreciate your effort and wish you success ahead.\n\nBest regards,\n[Your Name]`,
                           });
                           setIsEmailModalOpen(true);
@@ -1110,8 +1027,8 @@ export default function InboxPage() {
                         {selectedEmail?.rejected
                           ? "Rejected"
                           : RejectLoading
-                            ? "Rejecting..."
-                            : "Reject"}
+                          ? "Rejecting..."
+                          : "Reject"}
                       </Button>
                     </div>
 
@@ -1149,18 +1066,19 @@ export default function InboxPage() {
                                 className="flex items-start gap-2"
                               >
                                 <div
-                                  className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${point.toLowerCase().includes("advantage") ||
+                                  className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                                    point.toLowerCase().includes("advantage") ||
                                     point.toLowerCase().includes("strength")
-                                    ? "bg-green-500"
-                                    : point
-                                      .toLowerCase()
-                                      .includes("weakness") ||
-                                      point
-                                        .toLowerCase()
-                                        .includes("challenge")
+                                      ? "bg-green-500"
+                                      : point
+                                          .toLowerCase()
+                                          .includes("weakness") ||
+                                        point
+                                          .toLowerCase()
+                                          .includes("challenge")
                                       ? "bg-red-500"
                                       : "bg-blue-500"
-                                    }`}
+                                  }`}
                                 />
                                 <span className="text-sm text-gray-700">
                                   {point}
@@ -1254,7 +1172,7 @@ export default function InboxPage() {
             </DialogHeader>
 
             {selectedEmail?.attachments &&
-              selectedEmail.attachments.length > 0 ? (
+            selectedEmail.attachments.length > 0 ? (
               <>
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {selectedEmail.attachments.map((attachment, index) => (
