@@ -431,13 +431,29 @@ export default function PitchubLanding() {
                   href="mailto:hello@pitchub.com"
                   className="hover:text-background transition-colors"
                 >
-                  hello@pitchub.com
+                  pitchubtech@gmail.com
                 </a>
               </div>
             </div>
 
-            <div className="border-t border-background/20 pt-8 flex flex-col md:flex-row justify-center items-center gap-4 text-sm text-background/60">
+            <div className="border-t border-background/20 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-background/60">
               <p>© 2025 Pitchub. All rights reserved.</p>
+
+              <div className="flex items-center gap-6">
+                <Link
+                  href="/privacy-policy"
+                  className="hover:text-background transition-colors"
+                >
+                  Privacy Policy
+                </Link>
+
+                <Link
+                  href="/terms-of-use"
+                  className="hover:text-background transition-colors"
+                >
+                  Terms & Conditions
+                </Link>
+              </div>
             </div>
           </div>
         </div>
