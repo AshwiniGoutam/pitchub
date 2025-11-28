@@ -46,21 +46,10 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         params: {
           // ⭐⭐⭐ FIXED SCOPES WITH CALENDAR PERMISSIONS ⭐⭐⭐
-          scope: [
-            "openid",
-            "profile",
-            "email",
-
-            // Gmail read access
-            "https://www.googleapis.com/auth/gmail.readonly",
-
-            // REQUIRED FOR GOOGLE MEET LINK CREATION
-            "https://www.googleapis.com/auth/calendar",
-            "https://www.googleapis.com/auth/calendar.events",
-          ].join(" "),
-
-          access_type: "offline", // REQUIRED for refresh token
-          prompt: "consent", // Forces Google to issue new token with new scopes
+          scope:
+            "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify",
+          access_type: "offline",
+          prompt: "consent",
         },
       },
     }),
