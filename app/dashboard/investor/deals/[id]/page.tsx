@@ -89,9 +89,7 @@ export default function DealDetailPage() {
   const [selectedTypes, setSelectedTypes] = useState([]);
   const [note, setNote] = useState("");
 
-  // console.log('emailData', AnalysisData?.requestData);
-
-  console.log("AnalysisData?.requestData?._id", AnalysisData);
+  // console.log("AnalysisData?.requestData?._id", AnalysisData);
 
   async function fetchEmailData() {
     try {
@@ -372,6 +370,10 @@ export default function DealDetailPage() {
     handleAction("save_notes", { note }, note?.emailId);
   };
 
+  
+
+  console.log('emailData', emailAnalysis);
+
   if (loading) {
     return (
       <div className="flex h-screen bg-gray-50">
@@ -468,7 +470,7 @@ export default function DealDetailPage() {
               <h1 className="mb-2 text-3xl font-bold">{getCompanyName()}</h1>
               <p className="text-gray-600">
                 {getFundingStage()} Stage | {emailAnalysis?.sector || "SaaS"} |
-                Seeking $2M
+                {/* Seeking $2M */}
               </p>
               <Badge
                 className={`mt-2 ${
@@ -487,12 +489,12 @@ export default function DealDetailPage() {
               </Badge>
             </div>
             <div className="flex gap-3">
-              <Button
+              {/* <Button
                 className="bg-emerald-600 hover:bg-emerald-700"
                 onClick={handleScheduleMeeting}
               >
                 Schedule Meeting
-              </Button>
+              </Button> */}
               <Button
                 // className="bg-emerald-600"
                 onClick={() => setRequestModalOpen(true)}
@@ -689,11 +691,13 @@ export default function DealDetailPage() {
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Funding Requirement</span>
-                      <span className="font-medium text-right">$2M</span>
+                      {/* <span className="font-medium text-right">$2M</span> */}
+                      <span className="font-medium text-right">Not Mentioned</span>
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Valuation</span>
-                      <span className="font-medium text-right">$10M</span>
+                      {/* <span className="font-medium text-right">$10M</span> */}
+                      <span className="font-medium text-right">Not Mentioned</span>
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Lead Investor</span>
