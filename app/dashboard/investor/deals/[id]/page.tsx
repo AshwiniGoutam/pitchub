@@ -469,7 +469,8 @@ export default function DealDetailPage() {
             <div>
               <h1 className="mb-2 text-3xl font-bold">{getCompanyName()}</h1>
               <p className="text-gray-600">
-                {getFundingStage()} Stage | {emailAnalysis?.sector || "SaaS"} |
+                {getFundingStage()} Stage | {emailAnalysis?.sector || "SaaS"} 
+                {/* | */}
                 {/* Seeking $2M */}
               </p>
               <Badge
