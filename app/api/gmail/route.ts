@@ -324,223 +324,154 @@ async function getExistingEmailSafe(collection, gmailId) {
 export async function GET(request) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
-    return new Response(JSON.stringify({ error: "Not authenticated" }), {
-      status: 401,
-    });
+    return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
 
   try {
     const db = await getDatabase();
     const emailsCollection = db.collection("gmail_emails");
     const acceptedCollection = db.collection("accepted_pitches");
+    const rejectedCollection = db.collection("rejected_pitches");
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
     const offset = (page - 1) * limit;
 
-    // Step 1: Fetch investor thesis
+    // 1️⃣ Fetch investor thesis
     const thesis = await getInvestorThesisByEmail(session.user.email);
 
-    // Step 2: Fetch Gmail messages (90 days)
-    const query =
-      "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
-    let allMessages = [];
-
-    try {
-      const listRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
-          query
-        )}`,
-        { headers: { Authorization: `Bearer ${session.accessToken}` } }
-      );
-
-      if (!listRes.ok) {
-        const errorText = await listRes.text();
-        console.error("Gmail list fetch error:", listRes.status, errorText);
-        return new Response(
-          JSON.stringify({ error: "Failed to fetch Gmail list" }),
-          { status: 502 }
-        );
-      }
-
-      const listData = await listRes.json();
-      allMessages = listData.messages || [];
-    } catch (error) {
-      console.error("Gmail API connection error:", error);
-      return new Response(JSON.stringify({ error: "Gmail API unavailable" }), {
-        status: 503,
-      });
-    }
-
-    const paginatedMessages = allMessages.slice(offset, offset + limit);
-    const gmailIds = paginatedMessages.map((m) => m.id);
-
-    // ✅ Get accepted emails for this user
-    const acceptedIds = new Set();
-    try {
-      const accepted = await acceptedCollection
-        .find({ userEmail: session.user.email, emailId: { $in: gmailIds } })
-        .toArray();
-      accepted.forEach((a) => acceptedIds.add(a.emailId));
-    } catch (error) {
-      console.warn("Error fetching accepted pitches:", error.message);
-    }
-
-    // ✅ Get rejected emails
-    const rejectedIds = new Set();
-    try {
-      const rejected = await db
-        .collection("rejected_pitches")
-        .find({ userEmail: session.user.email, emailId: { $in: gmailIds } })
-        .toArray();
-      rejected.forEach((r) => rejectedIds.add(r.emailId));
-    } catch (error) {
-      console.warn("Error fetching rejected pitches:", error.message);
-    }
-
-    const processedEmails = [];
-
-    for (const msg of paginatedMessages) {
-      try {
-        let existing = await getExistingEmailSafe(emailsCollection, msg.id);
-
-        if (!existing) {
-          // Fetch new email from Gmail
-          const detailRes = await fetch(
-            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
-            { headers: { Authorization: `Bearer ${session.accessToken}` } }
-          );
-
-          if (!detailRes.ok) {
-            console.warn(`Failed to fetch email ${msg.id}:`, detailRes.status);
-            continue;
-          }
-
-          const detail = await detailRes.json();
-          const headers = detail.payload?.headers || [];
-          const subject =
-            headers.find((h) => h.name === "Subject")?.value || "(no subject)";
-          const fromHeader =
-            headers.find((h) => h.name === "From")?.value || "(unknown sender)";
-          const date = headers.find((h) => h.name === "Date")?.value || "";
-          const rawBody = extractBodySafe(detail.payload);
-          const attachments = extractAttachmentsSafe(detail.payload, msg.id);
-
-          let from = cleanTextForMongoDB(fromHeader);
-          let fromEmail = cleanTextForMongoDB(fromHeader);
-          const match = fromHeader.match(/^(.*)<(.+)>$/);
-          if (match) {
-            from = cleanTextForMongoDB(match[1].trim());
-            fromEmail = cleanTextForMongoDB(match[2].trim());
-          }
-
-          const cleanedSubject = cleanTextForMongoDB(subject);
-          const cleanedBody = cleanTextForMongoDB(rawBody);
-          const sector = detectSector(fromEmail, cleanedSubject, cleanedBody);
-          const status = defaultStatus(sector);
-          const relevanceScore = computeRelevance(
-            {
-              subject: cleanedSubject,
-              content: cleanedBody,
-              sector,
-            },
-            thesis
-          );
-
-          const newEmail = cleanEmailData({
-            gmailId: msg.id,
-            from,
-            fromEmail,
-            subject: cleanedSubject,
-            sector,
-            status,
-            relevanceScore,
-            timestamp: new Date(date).toISOString(),
-            content: cleanedBody,
-            attachments,
-            isRead: !detail.labelIds?.includes("UNREAD"),
-            isStarred: detail.labelIds?.includes("STARRED") || false,
-            createdAt: new Date(),
-          });
-
-          // Save to database
-          try {
-            await emailsCollection.updateOne(
-              { gmailId: msg.id },
-              { $set: newEmail },
-              { upsert: true }
-            );
-            existing = newEmail;
-          } catch (dbError) {
-            console.warn(
-              `Failed to save email ${msg.id} to database:`,
-              dbError.message
-            );
-            continue;
-          }
-        }
-
-        // ✅ mark accepted
-        // if (existing) {
-        //   existing.accepted = acceptedIds.has(existing.gmailId);
-        //   processedEmails.push(existing);
-        // }
-        // ✅ mark accepted and rejected
-        if (existing) {
-          existing.accepted = acceptedIds.has(existing.gmailId);
-          existing.rejected = rejectedIds.has(existing.gmailId);
-          processedEmails.push(existing);
-        }
-
-        // Small delay to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } catch (error) {
-        console.error(`Error processing email ${msg.id}:`, error);
-        // Continue with next email instead of failing completely
-      }
-    }
-
-    // Sort by relevance
-    const sorted = processedEmails.sort(
-      (a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0)
+    // 2️⃣ Fetch Gmail list
+    const query = "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
+    const listRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}`,
+      { headers: { Authorization: `Bearer ${session.accessToken}` } }
     );
 
-    // Remove _id and rename gmailId -> id for frontend
-    const sanitized = sorted.map((e) => ({
-      ...e,
-      id: e.gmailId,
-      _id: undefined,
-      gmailId: undefined,
-    }));
+    if (!listRes.ok) {
+      const errorText = await listRes.text();
+      return new Response(JSON.stringify({ error: "Failed to fetch Gmail list", details: errorText }), { status: 502 });
+    }
+
+    const listData = await listRes.json();
+    const allMessages = listData.messages || [];
+    const paginatedMessages = allMessages.slice(offset, offset + limit);
+    const gmailIds = paginatedMessages.map(m => m.id);
+
+    // 3️⃣ Fetch accepted and rejected emails in parallel
+    const [accepted, rejected] = await Promise.all([
+      acceptedCollection.find({ userEmail: session.user.email, emailId: { $in: gmailIds } }).toArray(),
+      rejectedCollection.find({ userEmail: session.user.email, emailId: { $in: gmailIds } }).toArray()
+    ]);
+
+    const acceptedIds = new Set(accepted.map(a => a.emailId));
+    const rejectedIds = new Set(rejected.map(r => r.emailId));
+
+    // 4️⃣ Fetch email details in parallel
+    const emailPromises = paginatedMessages.map(async (msg) => {
+      let existing = await getExistingEmailSafe(emailsCollection, msg.id);
+      if (existing) {
+        existing.accepted = acceptedIds.has(existing.gmailId);
+        existing.rejected = rejectedIds.has(existing.gmailId);
+        return existing;
+      }
+
+      const detailRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+        { headers: { Authorization: `Bearer ${session.accessToken}` } }
+      );
+      if (!detailRes.ok) return null;
+
+      const detail = await detailRes.json();
+      const headers = detail.payload?.headers || [];
+      const subject = headers.find(h => h.name === "Subject")?.value || "(no subject)";
+      const fromHeader = headers.find(h => h.name === "From")?.value || "(unknown sender)";
+      const date = headers.find(h => h.name === "Date")?.value || "";
+
+      const rawBody = extractBodySafe(detail.payload);
+      const attachments = extractAttachmentsSafe(detail.payload, msg.id);
+
+      let from = cleanTextForMongoDB(fromHeader);
+      let fromEmail = cleanTextForMongoDB(fromHeader);
+      const match = fromHeader.match(/^(.*)<(.+)>$/);
+      if (match) {
+        from = cleanTextForMongoDB(match[1].trim());
+        fromEmail = cleanTextForMongoDB(match[2].trim());
+      }
+
+      const cleanedSubject = cleanTextForMongoDB(subject);
+      const cleanedBody = cleanTextForMongoDB(rawBody);
+      const sector = detectSector(fromEmail, cleanedSubject, cleanedBody);
+      const status = defaultStatus(sector);
+
+      const relevanceScore = computeRelevance(
+        { subject: cleanedSubject, content: cleanedBody, sector },
+        thesis
+      );
+
+      const newEmail = cleanEmailData({
+        gmailId: msg.id,
+        from,
+        fromEmail,
+        subject: cleanedSubject,
+        sector,
+        status,
+        relevanceScore,
+        timestamp: new Date(date).toISOString(),
+        content: cleanedBody,
+        attachments,
+        isRead: !detail.labelIds?.includes("UNREAD"),
+        isStarred: detail.labelIds?.includes("STARRED") || false,
+        createdAt: new Date(),
+        accepted: acceptedIds.has(msg.id),
+        rejected: rejectedIds.has(msg.id),
+      });
+
+      return newEmail;
+    });
+
+    const emailResults = await Promise.allSettled(emailPromises);
+
+    // 5️⃣ Prepare bulk DB writes
+    const bulkOps = emailResults
+      .filter(r => r.status === "fulfilled" && r.value)
+      .map(r => ({
+        updateOne: {
+          filter: { gmailId: r.value.gmailId },
+          update: { $set: r.value },
+          upsert: true
+        }
+      }));
+
+    if (bulkOps.length > 0) {
+      await emailsCollection.bulkWrite(bulkOps);
+    }
+
+    // 6️⃣ Sort by relevance and sanitize
+    const sanitized = emailResults
+      .filter(r => r.status === "fulfilled" && r.value)
+      .map(r => {
+        const e = r.value;
+        return {
+          ...e,
+          id: e.gmailId,
+          _id: undefined,
+          gmailId: undefined
+        };
+      })
+      .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
 
     return new Response(
       JSON.stringify({
         emails: sanitized,
         total: allMessages.length,
         page,
-        limit,
+        limit
       }),
-      {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-        },
-      }
+      { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } }
     );
   } catch (err) {
     console.error("🔥 Gmail API error:", err);
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        details: "Failed to process email data",
-      }),
-      {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-        },
-      }
-    );
+    return new Response(JSON.stringify({ error: "Internal server error", details: "Failed to process email data" }), { status: 500 });
   }
 }

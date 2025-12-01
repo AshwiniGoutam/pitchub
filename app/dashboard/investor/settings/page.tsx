@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -24,6 +24,31 @@ import { InvestorSidebar } from "@/components/investor-sidebar";
 import { X, Plus, Save, RefreshCw } from "lucide-react";
 import type { InvestorThesis } from "@/lib/matching-engine";
 import { useUser } from "@/context/UserContext";
+import { countriesData, getAllCountries } from "@/lib/countries"; // optional: import list, fallback included
+
+// Fallback country list if you don't have /lib/countries
+const fallbackCountries = [
+  "United States",
+  "India",
+  "United Kingdom",
+  "Canada",
+  "Australia",
+  "Germany",
+  "France",
+  "Italy",
+  "Spain",
+  "Netherlands",
+  "Switzerland",
+  "Sweden",
+  "Norway",
+  "Japan",
+  "China",
+  "Singapore",
+  "Brazil",
+  "South Africa",
+  "United Arab Emirates",
+  "Mexico",
+];
 
 export default function InvestorSettingsPage() {
   const [thesis, setThesis] = useState<InvestorThesis>({
@@ -35,6 +60,7 @@ export default function InvestorSettingsPage() {
     keywords: [],
     excludedKeywords: [],
   });
+
   const [newKeyword, setNewKeyword] = useState("");
   const [newExcludedKeyword, setNewExcludedKeyword] = useState("");
   const [newGeography, setNewGeography] = useState("");
@@ -42,57 +68,96 @@ export default function InvestorSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const { user } = useUser();
-  console.log('user',user);
-  
 
-useEffect(() => {
-  if (user?.id) {
-    fetchInvestorThesis()
-  }
-}, [user])
-
-
-  const fetchInvestorThesis = async () => {
-    if (!user?.id) return;
+  // Country dropdown state
+  const [countries] = useState(() => {
     try {
-      const response = await fetch("/api/investor/thesis", {
-        headers: {
-          "x-user-id": user.id, // ✅ pass user ID
-        },
+      // try importing function (if exists)
+      // @ts-ignore
+      if (typeof getAllCountries === "function") return getAllCountries();
+    } catch (e) { }
+    return countriesData;
+  });
+  const [countryQuery, setCountryQuery] = useState("");
+  const [isDropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // Normalize & fetch thesis
+  useEffect(() => {
+    if (user?.id) fetchInvestorThesis();
+  }, [user]);
+
+  async function fetchInvestorThesis() {
+    if (!user?.id) {
+      setIsLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/investor/thesis", {
+        headers: { "x-user-id": user.id },
       });
-      if (response.ok) {
-        const data = await response.json();
-        setThesis(data);
+      if (res.ok) {
+        const data = await res.json();
+        // normalize arrays (be defensive)
+        setThesis({
+          ...data,
+          sectors: Array.isArray(data.sectors) ? data.sectors : [],
+          stages: Array.isArray(data.stages) ? data.stages : [],
+          keywords: Array.isArray(data.keywords) ? data.keywords : [],
+          excludedKeywords: Array.isArray(data.excludedKeywords)
+            ? data.excludedKeywords
+            : [],
+          geographies: Array.isArray(data.geographies) ? data.geographies : [],
+          checkSizeMin: data.checkSizeMin ?? 0,
+          checkSizeMax: data.checkSizeMax ?? 0,
+        });
       }
-    } catch (error) {
-      console.error("Error fetching thesis:", error);
+    } catch (err) {
+      console.error("Fetch thesis error", err);
     } finally {
       setIsLoading(false);
     }
+  }
+
+  // Safe add / remove helpers
+  const addItem = (key: keyof InvestorThesis, value: string) => {
+    if (!value) return;
+    setThesis((prev) => {
+      const current = Array.isArray(prev[key]) ? (prev[key] as string[]) : [];
+      if (current.includes(value)) return prev;
+      return { ...prev, [key]: [...current, value] } as InvestorThesis;
+    });
+  };
+
+  const removeItem = (key: keyof InvestorThesis, value: string) => {
+    setThesis((prev) => {
+      const current = Array.isArray(prev[key]) ? (prev[key] as string[]) : [];
+      const updated = current.filter((v) => v !== value);
+      return { ...prev, [key]: updated } as InvestorThesis;
+    });
   };
 
   const handleSave = async () => {
     if (!user?.id) return;
     setIsSaving(true);
     setMessage("");
-
     try {
-      const response = await fetch("/api/investor/thesis", {
+      const res = await fetch("/api/investor/thesis", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "x-user-id": user.id, // ✅ pass user ID
+          "x-user-id": user.id,
         },
         body: JSON.stringify(thesis),
       });
-
-      if (response.ok) {
+      if (res.ok) {
         setMessage("Investment thesis saved successfully!");
         await triggerReMatching();
       } else {
         setMessage("Error saving thesis. Please try again.");
       }
-    } catch (error) {
+    } catch (err) {
+      console.error(err);
       setMessage("Error saving thesis. Please try again.");
     } finally {
       setIsSaving(false);
@@ -103,98 +168,31 @@ useEffect(() => {
     try {
       await fetch("/api/investor/matching", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ investorThesis: thesis }),
       });
-    } catch (error) {
-      console.error("Error triggering re-matching:", error);
+    } catch (err) {
+      console.error("re-match error", err);
     }
   };
 
-  const addSector = (sector: string) => {
-    if (sector && !thesis.sectors.includes(sector)) {
-      setThesis((prev) => ({ ...prev, sectors: [...prev.sectors, sector] }));
+  // Dropdown: close on outside click
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (!dropdownRef.current) return;
+      if (!dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
     }
-  };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
 
-  const removeSector = (sector: string) => {
-    setThesis((prev) => ({
-      ...prev,
-      sectors: prev.sectors.filter((s) => s !== sector),
-    }));
-  };
+  // filtered countries
+  const filteredCountries = countries.filter((c) =>
+    c.toLowerCase().includes(countryQuery.trim().toLowerCase())
+  );
 
-  const addStage = (stage: string) => {
-    if (stage && !thesis.stages.includes(stage)) {
-      setThesis((prev) => ({ ...prev, stages: [...prev.stages, stage] }));
-    }
-  };
-
-  const removeStage = (stage: string) => {
-    setThesis((prev) => ({
-      ...prev,
-      stages: prev.stages.filter((s) => s !== stage),
-    }));
-  };
-
-  const addKeyword = () => {
-    if (newKeyword.trim() && !thesis.keywords.includes(newKeyword.trim())) {
-      setThesis((prev) => ({
-        ...prev,
-        keywords: [...prev.keywords, newKeyword.trim()],
-      }));
-      setNewKeyword("");
-    }
-  };
-
-  const removeKeyword = (keyword: string) => {
-    setThesis((prev) => ({
-      ...prev,
-      keywords: prev.keywords.filter((k) => k !== keyword),
-    }));
-  };
-
-  const addExcludedKeyword = () => {
-    if (
-      newExcludedKeyword.trim() &&
-      !thesis.excludedKeywords.includes(newExcludedKeyword.trim())
-    ) {
-      setThesis((prev) => ({
-        ...prev,
-        excludedKeywords: [...prev.excludedKeywords, newExcludedKeyword.trim()],
-      }));
-      setNewExcludedKeyword("");
-    }
-  };
-
-  const removeExcludedKeyword = (keyword: string) => {
-    setThesis((prev) => ({
-      ...prev,
-      excludedKeywords: prev.excludedKeywords.filter((k) => k !== keyword),
-    }));
-  };
-
-  const addGeography = () => {
-    if (
-      newGeography.trim() &&
-      !thesis.geographies.includes(newGeography.trim())
-    ) {
-      setThesis((prev) => ({
-        ...prev,
-        geographies: [...prev.geographies, newGeography.trim()],
-      }));
-      setNewGeography("");
-    }
-  };
-
-  const removeGeography = (geography: string) => {
-    setThesis((prev) => ({
-      ...prev,
-      geographies: prev.geographies.filter((g) => g !== geography),
-    }));
-  };
 
   if (isLoading) {
     return (
@@ -213,7 +211,6 @@ useEffect(() => {
   return (
     <div className="flex h-screen bg-background">
       <InvestorSidebar />
-
       <div className="flex-1 overflow-auto">
         <div className="p-6">
           {/* Header */}
@@ -222,8 +219,8 @@ useEffect(() => {
               Investment Thesis
             </h1>
             <p className="text-muted-foreground">
-              Configure your investment preferences to improve deal flow
-              matching and relevance scoring
+              Configure your investment preferences to improve deal flow matching
+              and relevance scoring
             </p>
           </div>
 
@@ -256,35 +253,46 @@ useEffect(() => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
-                  {thesis.sectors.map((sector) => (
+                  {thesis.sectors.map((s) => (
                     <Badge
-                      key={sector}
+                      key={s}
                       variant="secondary"
                       className="flex items-center gap-1"
                     >
-                      {sector}
-                      <X
-                        className="h-3 w-3 cursor-pointer"
-                        onClick={() => removeSector(sector)}
-                      />
+                      {s}
+                      <span
+                        onClick={() => removeItem("sectors", s)}>
+                        <X
+                          className="h-3 w-3 cursor-pointer"
+                        />
+                      </span>
                     </Badge>
                   ))}
                 </div>
-                <Select onValueChange={addSector}>
+                <Select
+                  onValueChange={(value) => addItem("sectors", value)}
+                  defaultValue=""
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Add a sector" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Fintech">Fintech</SelectItem>
-                    <SelectItem value="HealthTech">HealthTech</SelectItem>
-                    <SelectItem value="EdTech">EdTech</SelectItem>
-                    <SelectItem value="AI/ML">AI/ML</SelectItem>
-                    <SelectItem value="SaaS">SaaS</SelectItem>
-                    <SelectItem value="E-commerce">E-commerce</SelectItem>
-                    <SelectItem value="CleanTech">CleanTech</SelectItem>
-                    <SelectItem value="AgriTech">AgriTech</SelectItem>
-                    <SelectItem value="Cybersecurity">Cybersecurity</SelectItem>
-                    <SelectItem value="Blockchain">Blockchain</SelectItem>
+                    {[
+                      "Fintech",
+                      "HealthTech",
+                      "EdTech",
+                      "AI/ML",
+                      "SaaS",
+                      "E-commerce",
+                      "CleanTech",
+                      "AgriTech",
+                      "Cybersecurity",
+                      "Blockchain",
+                    ].map((sector) => (
+                      <SelectItem key={sector} value={sector}>
+                        {sector}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </CardContent>
@@ -300,30 +308,41 @@ useEffect(() => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
-                  {thesis.stages.map((stage) => (
+                  {thesis.stages.map((s) => (
                     <Badge
-                      key={stage}
+                      key={s}
                       variant="secondary"
                       className="flex items-center gap-1"
                     >
-                      {stage}
-                      <X
+                      {s}
+                      {/* <X
                         className="h-3 w-3 cursor-pointer"
-                        onClick={() => removeStage(stage)}
-                      />
+                        onClick={() => removeItem("stages", s)}
+                      /> */}
+                      <span
+                        onClick={() => removeItem("stages", s)}>
+                        <X
+                          className="h-3 w-3 cursor-pointer"
+                        />
+                      </span>
                     </Badge>
                   ))}
                 </div>
-                <Select onValueChange={addStage}>
+                <Select
+                  onValueChange={(value) => addItem("stages", value)}
+                  defaultValue=""
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Add a funding stage" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Pre-Seed">Pre-Seed</SelectItem>
-                    <SelectItem value="Seed">Seed</SelectItem>
-                    <SelectItem value="Series A">Series A</SelectItem>
-                    <SelectItem value="Series B">Series B</SelectItem>
-                    <SelectItem value="Series C+">Series C+</SelectItem>
+                    {["Pre-Seed", "Seed", "Series A", "Series B", "Series C+"].map(
+                      (stage) => (
+                        <SelectItem key={stage} value={stage}>
+                          {stage}
+                        </SelectItem>
+                      )
+                    )}
                   </SelectContent>
                 </Select>
               </CardContent>
@@ -381,58 +400,136 @@ useEffect(() => {
                   Specify regions or countries you prefer to invest in
                 </CardDescription>
               </CardHeader>
+
               <CardContent className="space-y-4">
+                {/* selected badges */}
                 <div className="flex flex-wrap gap-2">
-                  {thesis.geographies.map((geography) => (
+                  {thesis.geographies.map((g) => (
                     <Badge
-                      key={geography}
+                      key={g}
                       variant="secondary"
                       className="flex items-center gap-1"
                     >
-                      {geography}
-                      <X
-                        className="h-3 w-3 cursor-pointer"
-                        onClick={() => removeGeography(geography)}
-                      />
+                      {g}
+                      <span onClick={() => removeItem("geographies", g)}>
+                        <X className="h-3 w-3 cursor-pointer" />
+                      </span>
                     </Badge>
                   ))}
                 </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="e.g., United States, Europe, Asia"
-                    value={newGeography}
-                    onChange={(e) => setNewGeography(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && addGeography()}
-                  />
-                  <Button onClick={addGeography} size="sm">
-                    <Plus className="h-4 w-4" />
-                  </Button>
+
+                {/* custom dropdown */}
+                <div ref={dropdownRef} className="relative">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDropdownOpen((v) => !v);
+                        setCountryQuery("");
+                      }}
+                      className="w-full text-left px-3 py-1 border rounded-md bg-white"
+                    >
+                      {countryQuery ? (
+                        <span className="text-sm text-foreground">{countryQuery}</span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          {thesis.geographies.length > 0
+                            ? "Add another country..."
+                            : "Select a country"}
+                        </span>
+                      )}
+                    </button>
+
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        // add manually typed geography if not empty
+                        if (newGeography && newGeography.trim()) {
+                          addItem("geographies", newGeography.trim());
+                          setNewGeography("");
+                        } else {
+                          // open dropdown
+                          setDropdownOpen((v) => !v);
+                        }
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {isDropdownOpen && (
+                    <div className="absolute z-40 mt-2 w-full max-h-60 overflow-auto rounded-md border bg-white shadow-lg">
+                      <div className="p-2">
+                        <Input
+                          value={countryQuery}
+                          onChange={(e) => setCountryQuery(e.target.value)}
+                          placeholder="Search country..."
+                          className="mb-2"
+                        />
+
+                        <div>
+                          {filteredCountries.length === 0 ? (
+                            <div className="px-2 py-3 text-sm text-muted-foreground">
+                              No results
+                            </div>
+                          ) : (
+                            filteredCountries.map((country) => (
+                              <div
+                                key={country}
+                                className={`flex w-full cursor-pointer items-center justify-between px-2 py-2 hover:bg-slate-50 ${thesis.geographies.includes(country)
+                                  ? "opacity-60"
+                                  : ""
+                                  }`}
+                                onClick={() => {
+                                  addItem("geographies", country);
+                                  setDropdownOpen(false);
+                                }}
+                              >
+                                <span>{country}</span>
+                                {thesis.geographies.includes(country) && (
+                                  <span className="text-xs text-muted-foreground">
+                                    Selected
+                                  </span>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
+
 
             {/* Keywords */}
             <Card>
               <CardHeader>
                 <CardTitle>Positive Keywords</CardTitle>
                 <CardDescription>
-                  Keywords that increase relevance when found in startup
-                  descriptions
+                  Keywords that increase relevance when found in startup descriptions
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
-                  {thesis.keywords.map((keyword) => (
+                  {thesis.keywords.map((k) => (
                     <Badge
-                      key={keyword}
+                      key={k}
                       variant="secondary"
                       className="flex items-center gap-1"
                     >
-                      {keyword}
-                      <X
+                      {k}
+                      {/* <X
                         className="h-3 w-3 cursor-pointer"
-                        onClick={() => removeKeyword(keyword)}
-                      />
+                        onClick={() => removeItem("keywords", k)}
+                      /> */}
+                      <span
+                        onClick={() => removeItem("keywords", k)}>
+                        <X
+                          className="h-3 w-3 cursor-pointer"
+                        />
+                      </span>
                     </Badge>
                   ))}
                 </div>
@@ -441,9 +538,15 @@ useEffect(() => {
                     placeholder="e.g., B2B, SaaS, AI, machine learning"
                     value={newKeyword}
                     onChange={(e) => setNewKeyword(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && addKeyword()}
+                    onKeyDown={(e) => e.key === "Enter" && addItem("keywords", newKeyword) && setNewKeyword("")}
                   />
-                  <Button onClick={addKeyword} size="sm">
+                  <Button
+                    onClick={() => {
+                      addItem("keywords", newKeyword);
+                      setNewKeyword("");
+                    }}
+                    size="sm"
+                  >
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
@@ -455,23 +558,28 @@ useEffect(() => {
               <CardHeader>
                 <CardTitle>Excluded Keywords</CardTitle>
                 <CardDescription>
-                  Keywords that decrease relevance when found in startup
-                  descriptions
+                  Keywords that decrease relevance when found in startup descriptions
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
-                  {thesis.excludedKeywords.map((keyword) => (
+                  {thesis.excludedKeywords.map((k) => (
                     <Badge
-                      key={keyword}
+                      key={k}
                       variant="destructive"
                       className="flex items-center gap-1"
                     >
-                      {keyword}
-                      <X
+                      {k}
+                      {/* <X
                         className="h-3 w-3 cursor-pointer"
-                        onClick={() => removeExcludedKeyword(keyword)}
-                      />
+                        onClick={() => removeItem("excludedKeywords", k)}
+                      /> */}
+                      <span
+                        onClick={() => removeItem("excludedKeywords", s)}>
+                        <X
+                          className="h-3 w-3 cursor-pointer"
+                        />
+                      </span>
                     </Badge>
                   ))}
                 </div>
@@ -480,24 +588,24 @@ useEffect(() => {
                     placeholder="e.g., B2C, consumer, retail"
                     value={newExcludedKeyword}
                     onChange={(e) => setNewExcludedKeyword(e.target.value)}
-                    onKeyPress={(e) =>
-                      e.key === "Enter" && addExcludedKeyword()
-                    }
+                    onKeyDown={(e) => e.key === "Enter" && addItem("excludedKeywords", newExcludedKeyword) && setNewExcludedKeyword("")}
                   />
-                  <Button onClick={addExcludedKeyword} size="sm">
+                  <Button
+                    onClick={() => {
+                      addItem("excludedKeywords", newExcludedKeyword);
+                      setNewExcludedKeyword("");
+                    }}
+                    size="sm"
+                  >
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Save Button */}
+            {/* Save & Re-match */}
             <div className="flex gap-4">
-              <Button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="flex-1"
-              >
+              <Button onClick={handleSave} disabled={isSaving} className="flex-1">
                 <Save className="h-4 w-4 mr-2" />
                 {isSaving ? "Saving..." : "Save Investment Thesis"}
               </Button>
