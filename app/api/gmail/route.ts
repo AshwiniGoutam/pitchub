@@ -221,7 +221,7 @@ function defaultStatus(sector) {
 }
 
 function determineStatus({ accepted, rejected, isRead }) {
-  if (accepted) return "Under Evaluation";
+  if (accepted && !rejected) return "Under Evaluation";
   if (rejected) return "Rejected";
   if (!isRead) return "New";
   return "Pending";
@@ -331,7 +331,9 @@ async function getExistingEmailSafe(collection, gmailId) {
 export async function GET(request) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
-    return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
+    return new Response(JSON.stringify({ error: "Not authenticated" }), {
+      status: 401,
+    });
   }
 
   try {
@@ -349,30 +351,43 @@ export async function GET(request) {
     const thesis = await getInvestorThesisByEmail(session.user.email);
 
     // 2️⃣ Fetch Gmail list
-    const query = "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
+    const query =
+      "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
     const listRes = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}`,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
+        query
+      )}`,
       { headers: { Authorization: `Bearer ${session.accessToken}` } }
     );
 
     if (!listRes.ok) {
       const errorText = await listRes.text();
-      return new Response(JSON.stringify({ error: "Failed to fetch Gmail list", details: errorText }), { status: 502 });
+      return new Response(
+        JSON.stringify({
+          error: "Failed to fetch Gmail list",
+          details: errorText,
+        }),
+        { status: 502 }
+      );
     }
 
     const listData = await listRes.json();
     const allMessages = listData.messages || [];
     const paginatedMessages = allMessages.slice(offset, offset + limit);
-    const gmailIds = paginatedMessages.map(m => m.id);
+    const gmailIds = paginatedMessages.map((m) => m.id);
 
     // 3️⃣ Fetch accepted and rejected emails in parallel
     const [accepted, rejected] = await Promise.all([
-      acceptedCollection.find({ userEmail: session.user.email, emailId: { $in: gmailIds } }).toArray(),
-      rejectedCollection.find({ userEmail: session.user.email, emailId: { $in: gmailIds } }).toArray()
+      acceptedCollection
+        .find({ userEmail: session.user.email, emailId: { $in: gmailIds } })
+        .toArray(),
+      rejectedCollection
+        .find({ userEmail: session.user.email, emailId: { $in: gmailIds } })
+        .toArray(),
     ]);
 
-    const acceptedIds = new Set(accepted.map(a => a.emailId));
-    const rejectedIds = new Set(rejected.map(r => r.emailId));
+    const acceptedIds = new Set(accepted.map((a) => a.emailId));
+    const rejectedIds = new Set(rejected.map((r) => r.emailId));
 
     // 4️⃣ Fetch email details in parallel
     const emailPromises = paginatedMessages.map(async (msg) => {
@@ -380,6 +395,12 @@ export async function GET(request) {
       if (existing) {
         existing.accepted = acceptedIds.has(existing.gmailId);
         existing.rejected = rejectedIds.has(existing.gmailId);
+
+        existing.status = determineStatus({
+          accepted: existing.accepted,
+          rejected: existing.rejected,
+          isRead: existing.isRead,
+        });
         return existing;
       }
 
@@ -391,9 +412,11 @@ export async function GET(request) {
 
       const detail = await detailRes.json();
       const headers = detail.payload?.headers || [];
-      const subject = headers.find(h => h.name === "Subject")?.value || "(no subject)";
-      const fromHeader = headers.find(h => h.name === "From")?.value || "(unknown sender)";
-      const date = headers.find(h => h.name === "Date")?.value || "";
+      const subject =
+        headers.find((h) => h.name === "Subject")?.value || "(no subject)";
+      const fromHeader =
+        headers.find((h) => h.name === "From")?.value || "(unknown sender)";
+      const date = headers.find((h) => h.name === "Date")?.value || "";
 
       const rawBody = extractBodySafe(detail.payload);
       const attachments = extractAttachmentsSafe(detail.payload, msg.id);
@@ -409,7 +432,11 @@ export async function GET(request) {
       const cleanedSubject = cleanTextForMongoDB(subject);
       const cleanedBody = cleanTextForMongoDB(rawBody);
       const sector = detectSector(fromEmail, cleanedSubject, cleanedBody);
-      const status = defaultStatus(sector);
+      const status = determineStatus({
+        accepted: acceptedIds.has(msg.id),
+        rejected: rejectedIds.has(msg.id),
+        isRead: !detail.labelIds?.includes("UNREAD"),
+      });
 
       const relevanceScore = computeRelevance(
         { subject: cleanedSubject, content: cleanedBody, sector },
@@ -441,13 +468,13 @@ export async function GET(request) {
 
     // 5️⃣ Prepare bulk DB writes
     const bulkOps = emailResults
-      .filter(r => r.status === "fulfilled" && r.value)
-      .map(r => ({
+      .filter((r) => r.status === "fulfilled" && r.value)
+      .map((r) => ({
         updateOne: {
           filter: { gmailId: r.value.gmailId },
           update: { $set: r.value },
-          upsert: true
-        }
+          upsert: true,
+        },
       }));
 
     if (bulkOps.length > 0) {
@@ -456,14 +483,14 @@ export async function GET(request) {
 
     // 6️⃣ Sort by relevance and sanitize
     const sanitized = emailResults
-      .filter(r => r.status === "fulfilled" && r.value)
-      .map(r => {
+      .filter((r) => r.status === "fulfilled" && r.value)
+      .map((r) => {
         const e = r.value;
         return {
           ...e,
           id: e.gmailId,
           _id: undefined,
-          gmailId: undefined
+          gmailId: undefined,
         };
       })
       .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
@@ -473,12 +500,21 @@ export async function GET(request) {
         emails: sanitized,
         total: allMessages.length,
         page,
-        limit
+        limit,
       }),
-      { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } }
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      }
     );
   } catch (err) {
     console.error("🔥 Gmail API error:", err);
-    return new Response(JSON.stringify({ error: "Internal server error", details: "Failed to process email data" }), { status: 500 });
+    return new Response(
+      JSON.stringify({
+        error: "Internal server error",
+        details: "Failed to process email data",
+      }),
+      { status: 500 }
+    );
   }
 }
