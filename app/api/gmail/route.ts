@@ -220,6 +220,13 @@ function defaultStatus(sector) {
   return "Pending";
 }
 
+function determineStatus({ accepted, rejected, isRead }) {
+  if (accepted) return "Under Evaluation";
+  if (rejected) return "Rejected";
+  if (!isRead) return "New";
+  return "Pending";
+}
+
 // ------------------ Relevance Scoring ------------------
 
 function computeRelevance(email, thesis) {
@@ -438,7 +445,12 @@ export async function GET(request) {
           const cleanedSubject = cleanTextForMongoDB(subject);
           const cleanedBody = cleanTextForMongoDB(rawBody);
           const sector = detectSector(fromEmail, cleanedSubject, cleanedBody);
-          const status = defaultStatus(sector);
+          const status = determineStatus({
+            accepted: acceptedIds.has(msg.id),
+            rejected: rejectedIds.has(msg.id),
+            isRead: !detail.labelIds?.includes("UNREAD"),
+          });
+
           const relevanceScore = computeRelevance(
             {
               subject: cleanedSubject,
@@ -487,9 +499,21 @@ export async function GET(request) {
         //   processedEmails.push(existing);
         // }
         // ✅ mark accepted and rejected
+        // if (existing) {
+        //   existing.accepted = acceptedIds.has(existing.gmailId);
+        //   existing.rejected = rejectedIds.has(existing.gmailId);
+        //   processedEmails.push(existing);
+        // }
         if (existing) {
           existing.accepted = acceptedIds.has(existing.gmailId);
           existing.rejected = rejectedIds.has(existing.gmailId);
+
+          existing.status = determineStatus({
+            accepted: existing.accepted,
+            rejected: existing.rejected,
+            isRead: existing.isRead,
+          });
+
           processedEmails.push(existing);
         }
 

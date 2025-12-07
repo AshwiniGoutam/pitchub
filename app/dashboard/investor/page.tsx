@@ -81,28 +81,21 @@ export default function DashboardPage() {
   };
 
   // ------------------ QUERIES ------------------
-  const {
-    data: dashboardData,
-    isLoading: isDashboardLoading,
-  } = useQuery({
+  const { data: dashboardData, isLoading: isDashboardLoading } = useQuery({
     queryKey: ["dashboardData"],
     queryFn: fetchDashboardData,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  const {
-    data: emails = [],
-    isLoading: isEmailsLoading,
-  } = useQuery({
+  const { data: emails = [], isLoading: isEmailsLoading } = useQuery({
     queryKey: ["emails"],
     queryFn: fetchEmails,
     staleTime: 5 * 60 * 1000,
   });
 
-  const {
-    data: thesis,
-    isLoading: isThesisLoading,
-  } = useQuery({
+  console.log("emails", emails);
+
+  const { data: thesis, isLoading: isThesisLoading } = useQuery({
     queryKey: ["thesis"],
     queryFn: fetchThesis,
     staleTime: 5 * 60 * 1000,
@@ -120,19 +113,34 @@ export default function DashboardPage() {
   const startups = dashboardData?.startups || [];
 
   // ------------------ EFFECTS ------------------
+  // useEffect(() => {
+  //   if (!Array.isArray(emails) || emails.length === 0) return;
+
+  //   const aggregated = Object.values(
+  //     emails.reduce((acc: any, curr: any) => {
+  //       const sector = curr.sector || "Unknown";
+  //       if (!acc[sector]) acc[sector] = { name: sector, value: 0 };
+  //       acc[sector].value += 1;
+  //       return acc;
+  //     }, {})
+  //   );
+  //   setSectorData(aggregated);
+  // }, [emails]);
+
   useEffect(() => {
-    if (!Array.isArray(emails) || emails.length === 0) return;
+    if (!Array.isArray(startups) || startups.length === 0) return;
 
     const aggregated = Object.values(
-      emails.reduce((acc: any, curr: any) => {
+      startups.reduce((acc: any, curr: any) => {
         const sector = curr.sector || "Unknown";
         if (!acc[sector]) acc[sector] = { name: sector, value: 0 };
         acc[sector].value += 1;
         return acc;
       }, {})
     );
+
     setSectorData(aggregated);
-  }, [emails]);
+  }, [startups]);
 
   useEffect(() => {
     let filtered = startups;
@@ -240,7 +248,7 @@ export default function DashboardPage() {
                 <CardContent className="space-y-6">
                   <div>
                     <p className="text-sm text-gray-500">Total Pitches</p>
-                    <p className="text-4xl font-bold">{stats.totalPitches}</p>
+                    <p className="text-4xl font-bold">{emails?.length}</p>
                   </div>
 
                   <div>
@@ -359,18 +367,28 @@ export default function DashboardPage() {
                         </Avatar>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-gray-900 truncate text-sm">
-                            {email.from}
-                          </p>
-                          <p className="text-sm text-gray-500 truncate">
                             {email.subject}
                           </p>
+                          <p className="text-sm text-gray-500 truncate">
+                            {email.from}
+                          </p>
                           <div className="flex items-center gap-2 mt-1">
-                            <Badge
-                              variant="secondary"
-                              className="bg-emerald-100 text-emerald-700 text-xs"
-                            >
-                              New
-                            </Badge>
+                           <Badge
+                            className={`${
+                              email?.status == "Contacted"
+                                ? "bg-blue-100 text-blue-700"
+                                : email?.status == "Under Evaluation"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : email?.status == "Pending"
+                                ? "bg-[#F7CB73] text-red-700"
+                                : email?.status == "New"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : email?.status == "Rejected"
+                                ? "bg-[#D9512C] text-white":""
+                            }`}
+                          >
+                            {email.status}
+                          </Badge>
                             {email.attachments?.length > 0 && (
                               <div className="flex items-center gap-1">
                                 <FileText className="h-3 w-3 text-gray-400" />

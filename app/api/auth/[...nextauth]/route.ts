@@ -45,7 +45,6 @@ export const authOptions: NextAuthOptions = {
 
       authorization: {
         params: {
-          // ⭐⭐⭐ FIXED SCOPES WITH CALENDAR PERMISSIONS ⭐⭐⭐
           scope:
             "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify",
           access_type: "offline",

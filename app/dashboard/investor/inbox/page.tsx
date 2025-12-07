@@ -300,12 +300,40 @@ export default function InboxPage() {
     }
   };
 
+  const markAsRead = async (emailId: string) => {
+    try {
+      await fetch("/api/gmail/mark-read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailId }),
+      });
+    } catch (err) {
+      console.warn("Failed to mark email as read:", err);
+    }
+  };
+
   // Single click - select email for preview and load full analysis
+  // const handleEmailSelect = async (email: Email) => {
+  //   setSelectedEmail(email);
+
+  //   if (!emailAnalyses[email.id]) {
+  //     await loadFullAnalysis(email.id);
+  //   }
+  // };
+
   const handleEmailSelect = async (email: Email) => {
-    setSelectedEmail(email);
+    // 🟢 1) Instantly update UI
+    email.isRead = true;
+
+    // 🟢 2) Update server
+    markAsRead(email.id);
+
+    // 🟢 3) Continue your existing logic
+    setSelectedEmail({ ...email });
 
     if (!emailAnalyses[email.id]) {
       await loadFullAnalysis(email.id);
+      await refetch();
     }
   };
 
@@ -847,10 +875,11 @@ export default function InboxPage() {
                                 : email?.status == "Under Evaluation"
                                 ? "bg-yellow-100 text-yellow-700"
                                 : email?.status == "Pending"
-                                ? "bg-red-100 text-red-700"
+                                ? "bg-[#F7CB73] text-red-700"
                                 : email?.status == "New"
                                 ? "bg-emerald-100 text-emerald-700"
-                                : ""
+                                : email?.status == "Rejected"
+                                ? "bg-[#D9512C] text-white":""
                             }`}
                           >
                             {email.status}
