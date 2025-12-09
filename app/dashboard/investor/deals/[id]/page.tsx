@@ -370,9 +370,7 @@ export default function DealDetailPage() {
     handleAction("save_notes", { note }, note?.emailId);
   };
 
-  
-
-  console.log('emailData', emailAnalysis);
+  console.log("emailData", emailAnalysis);
 
   if (loading) {
     return (
@@ -469,7 +467,7 @@ export default function DealDetailPage() {
             <div>
               <h1 className="mb-2 text-3xl font-bold">{getCompanyName()}</h1>
               <p className="text-gray-600">
-                {getFundingStage()} Stage | {emailAnalysis?.sector || "SaaS"} 
+                {getFundingStage()} Stage | {emailAnalysis?.sector || "SaaS"}
                 {/* | */}
                 {/* Seeking $2M */}
               </p>
@@ -585,9 +583,7 @@ export default function DealDetailPage() {
               {/* Competitive Analysis */}
               <Card>
                 <CardContent className="p-6 py-1">
-                  <h3 className="mb-4 text-xl font-bold">
-                    Competitive Analysis
-                  </h3>
+                  <h3 className="mb-4 text-xl font-bold">Key Factors</h3>
                   <div className="space-y-3">
                     {getCompetitiveAnalysis().map((point, index) => (
                       <div key={index} className="flex items-start gap-2">
@@ -693,12 +689,16 @@ export default function DealDetailPage() {
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Funding Requirement</span>
                       {/* <span className="font-medium text-right">$2M</span> */}
-                      <span className="font-medium text-right">Not Mentioned</span>
+                      <span className="font-medium text-right">
+                        Not Mentioned
+                      </span>
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Valuation</span>
                       {/* <span className="font-medium text-right">$10M</span> */}
-                      <span className="font-medium text-right">Not Mentioned</span>
+                      <span className="font-medium text-right">
+                        Not Mentioned
+                      </span>
                     </div>
                     <div className="flex justify-between border-b pb-3">
                       <span className="text-gray-600">Lead Investor</span>

@@ -17,6 +17,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import DashboardHeader from "@/components/header";
 
 interface DashboardStats {
   totalPitches: number;
@@ -44,6 +45,12 @@ interface Email {
   from: string;
   subject: string;
   attachments?: any[];
+}
+
+interface SectorResult {
+  emailId: string;
+  sector: string;
+  method: "keywords" | "gemini" | "error";
 }
 
 export default function DashboardPage() {
@@ -95,6 +102,43 @@ export default function DashboardPage() {
 
   console.log("emails", emails);
 
+  const predictSectors = async (
+    emails: Email[]
+  ): Promise<{ sectors: SectorResult[]; stats: any }> => {
+    const res = await fetch("/api/predict-sectors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emails }),
+    });
+    if (!res.ok) throw new Error("Failed to predict sectors");
+    return res.json();
+  };
+
+  const { data: sectorsData, isLoading: sectorsLoading } = useQuery({
+    queryKey: ["sectors"],
+    queryFn: () => predictSectors(emails),
+    enabled: !!emails.length,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+  });
+
+  console.log("sectorsData", sectorsData);
+
+  const sectors = sectorsData?.sectors;
+
+  // Count sector occurrences
+  const sectorCount = sectors?.reduce((acc, item) => {
+    acc[item?.sector] = (acc[item?.sector] || 0) + 1;
+    return acc;
+  }, {});
+
+  // Convert to Recharts format
+  const FinalSectorData =
+    sectorCount &&
+    Object?.entries(sectorCount).map(([name, value]) => ({
+      name,
+      value,
+    }));
+
   const { data: thesis, isLoading: isThesisLoading } = useQuery({
     queryKey: ["thesis"],
     queryFn: fetchThesis,
@@ -113,34 +157,34 @@ export default function DashboardPage() {
   const startups = dashboardData?.startups || [];
 
   // ------------------ EFFECTS ------------------
-  // useEffect(() => {
-  //   if (!Array.isArray(emails) || emails.length === 0) return;
-
-  //   const aggregated = Object.values(
-  //     emails.reduce((acc: any, curr: any) => {
-  //       const sector = curr.sector || "Unknown";
-  //       if (!acc[sector]) acc[sector] = { name: sector, value: 0 };
-  //       acc[sector].value += 1;
-  //       return acc;
-  //     }, {})
-  //   );
-  //   setSectorData(aggregated);
-  // }, [emails]);
-
   useEffect(() => {
-    if (!Array.isArray(startups) || startups.length === 0) return;
+    if (!Array.isArray(emails) || emails.length === 0) return;
 
     const aggregated = Object.values(
-      startups.reduce((acc: any, curr: any) => {
+      emails.reduce((acc: any, curr: any) => {
         const sector = curr.sector || "Unknown";
         if (!acc[sector]) acc[sector] = { name: sector, value: 0 };
         acc[sector].value += 1;
         return acc;
       }, {})
     );
-
     setSectorData(aggregated);
-  }, [startups]);
+  }, [emails]);
+
+  // useEffect(() => {
+  //   if (!Array.isArray(startups) || startups.length === 0) return;
+
+  //   const aggregated = Object.values(
+  //     startups.reduce((acc: any, curr: any) => {
+  //       const sector = curr.sector || "Unknown";
+  //       if (!acc[sector]) acc[sector] = { name: sector, value: 0 };
+  //       acc[sector].value += 1;
+  //       return acc;
+  //     }, {})
+  //   );
+
+  //   setSectorData(aggregated);
+  // }, [startups]);
 
   useEffect(() => {
     let filtered = startups;
@@ -170,6 +214,20 @@ export default function DashboardPage() {
       .toUpperCase()
       .slice(0, 2);
   };
+
+  // const fetchMarketNews = async () => {
+  //   const res = await fetch("/api/market-data/refresh");
+  //   const result = await res.json();
+  //   return result.data?.categorizedNews || [];
+  // };
+
+  // const { data: news = [], isLoading: newsLoading } = useQuery({
+  //   queryKey: ["dashboardNews"],
+  //   queryFn: fetchMarketNews,
+  //   staleTime: 10 * 60 * 1000,
+  // });
+
+  const pendingEmails = emails.filter((email) => email.status === "Pending");
 
   // ------------------ LOADING STATE ------------------
   if (isLoading) {
@@ -222,20 +280,7 @@ export default function DashboardPage() {
         <InvestorSidebar />
         <div className="flex-1 overflow-auto">
           {/* Header */}
-          <header className="sticky top-0 z-10 border-b bg-white">
-            <div className="flex h-16 items-center justify-between px-8">
-              <h1 className="text-2xl font-bold">Dashboard</h1>
-              <div className="flex items-center gap-4">
-                <Button variant="outline" className="gap-2 bg-transparent">
-                  <Calendar className="h-4 w-4" />
-                  Date Range
-                </Button>
-                <Button variant="ghost" size="icon">
-                  <Bell className="h-5 w-5" />
-                </Button>
-              </div>
-            </div>
-          </header>
+          <DashboardHeader pendingEmails={pendingEmails} title={"Dashboard"} />
 
           {/* Main Content */}
           <main className="p-8">
@@ -310,7 +355,7 @@ export default function DashboardPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={sectorData}
+                          data={FinalSectorData}
                           cx="50%"
                           cy="50%"
                           outerRadius={110}
@@ -320,7 +365,7 @@ export default function DashboardPage() {
                             `${name} ${(percent * 100).toFixed(0)}%`
                           }
                         >
-                          {sectorData.map((entry, index) => (
+                          {FinalSectorData?.map((entry, index) => (
                             <Cell
                               key={index}
                               fill={COLORS[index % COLORS.length]}
@@ -334,6 +379,67 @@ export default function DashboardPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Latest Market News Widget */}
+              {/* <div className="my-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-900">
+                      Market News
+                    </h2>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push("/market-research")}
+                      className="gap-2"
+                    >
+                      View All
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {newsLoading ? (
+                    <p className="text-gray-500">Loading market news...</p>
+                  ) : news.length === 0 ? (
+                    <p className="text-gray-500">No market news available.</p>
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {news.slice(0, 6).map((article, idx) => (
+                        <Card
+                          key={idx}
+                          className="hover:shadow-md transition-shadow cursor-pointer"
+                          onClick={() => {
+                            if (article.url) window.open(article.url, "_blank");
+                          }}
+                        >
+                          <CardContent className="p-4 space-y-2">
+                            <Badge className="bg-blue-100 text-blue-700">
+                              {article.source?.name || "News"}
+                            </Badge>
+
+                            <p className="font-semibold text-gray-900 line-clamp-2">
+                              {article.title}
+                            </p>
+
+                            <p className="text-sm text-gray-600 line-clamp-3">
+                              {article.description}
+                            </p>
+
+                            <p className="text-xs text-gray-400 mt-1">
+                              {new Date(article.publishedAt).toLocaleDateString(
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                }
+                              )}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div> */}
             </div>
 
             {/* What's New Today */}
@@ -373,22 +479,23 @@ export default function DashboardPage() {
                             {email.from}
                           </p>
                           <div className="flex items-center gap-2 mt-1">
-                           <Badge
-                            className={`${
-                              email?.status == "Contacted"
-                                ? "bg-blue-100 text-blue-700"
-                                : email?.status == "Under Evaluation"
-                                ? "bg-yellow-100 text-yellow-700"
-                                : email?.status == "Pending"
-                                ? "bg-[#F7CB73] text-red-700"
-                                : email?.status == "New"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : email?.status == "Rejected"
-                                ? "bg-[#D9512C] text-white":""
-                            }`}
-                          >
-                            {email.status}
-                          </Badge>
+                            <Badge
+                              className={`${
+                                email?.status == "Contacted"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : email?.status == "Under Evaluation"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : email?.status == "Pending"
+                                  ? "bg-[#F7CB73] text-red-700"
+                                  : email?.status == "New"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : email?.status == "Rejected"
+                                  ? "bg-[#D9512C] text-white"
+                                  : ""
+                              }`}
+                            >
+                              {email.status}
+                            </Badge>
                             {email.attachments?.length > 0 && (
                               <div className="flex items-center gap-1">
                                 <FileText className="h-3 w-3 text-gray-400" />

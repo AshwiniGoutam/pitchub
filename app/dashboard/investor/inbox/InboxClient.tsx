@@ -14,6 +14,7 @@ import {
   Calendar,
   CheckCircle,
   AlertCircle,
+  Key,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -953,8 +954,8 @@ export default function InboxClient({
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg">
-                          <BarChart3 className="h-5 w-5 text-purple-600" />
-                          Competitive Analysis
+                          <Key className="h-5 w-5 text-purple-600" />
+                          Key Factors
                         </CardTitle>
                       </CardHeader>
                       <CardContent>

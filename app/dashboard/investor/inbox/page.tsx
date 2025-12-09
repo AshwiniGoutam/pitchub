@@ -14,6 +14,7 @@ import {
   Calendar,
   CheckCircle,
   AlertCircle,
+  Key,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +33,7 @@ import {
 import { toast } from "sonner";
 import Loading from "./loading";
 import { useUser } from "@/context/UserContext";
+import DashboardHeader from "@/components/header";
 
 interface Email {
   id: string;
@@ -778,6 +780,8 @@ export default function InboxPage() {
     }
   };
 
+  const pendingEmails = emails.filter((email) => email.status === "Pending");
+
   return (
     <div className="flex h-screen bg-gray-50">
       <InvestorSidebar />
@@ -790,7 +794,7 @@ export default function InboxPage() {
           } overflow-auto border-r bg-white transition-all`}
         >
           {/* Header */}
-          <header className="sticky top-0 z-10 border-b bg-white">
+          {/* <header className="sticky top-0 z-10 border-b bg-white">
             <div className="flex h-16 items-center justify-between px-8">
               <div>
                 <h1 className="text-2xl font-bold">Inbox</h1>
@@ -803,7 +807,9 @@ export default function InboxPage() {
                 <Bell className="h-5 w-5" />
               </Button>
             </div>
-          </header>
+          </header> */}
+
+          <DashboardHeader title="Inbox" pendingEmails={pendingEmails} />
 
           {/* Table with fixed column widths */}
           <div className="p-8">
@@ -879,7 +885,8 @@ export default function InboxPage() {
                                 : email?.status == "New"
                                 ? "bg-emerald-100 text-emerald-700"
                                 : email?.status == "Rejected"
-                                ? "bg-[#D9512C] text-white":""
+                                ? "bg-[#D9512C] text-white"
+                                : ""
                             }`}
                           >
                             {email.status}
@@ -1081,8 +1088,8 @@ export default function InboxPage() {
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg">
-                          <BarChart3 className="h-5 w-5 text-purple-600" />
-                          Competitive Analysis
+                          <Key className="h-5 w-5 text-purple-600" />
+                          Key Factors
                         </CardTitle>
                       </CardHeader>
                       <CardContent>

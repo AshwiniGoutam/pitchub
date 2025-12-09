@@ -514,7 +514,7 @@ export default function Page() {
                   {selectedStartup.competitiveAnalysis?.length > 0 && (
                     <>
                       <p className="font-semibold mb-2 mt-5 text-gray-900 text-base">
-                        Competitive Analysis
+                        Key Factors
                       </p>
                       <ul className="text-gray-600 text-sm space-y-2 list-disc list-inside bg-gray-50 rounded p-3">
                         {selectedStartup.competitiveAnalysis.map((point, i) => (

@@ -75,7 +75,7 @@ export default function InvestorSettingsPage() {
       // try importing function (if exists)
       // @ts-ignore
       if (typeof getAllCountries === "function") return getAllCountries();
-    } catch (e) { }
+    } catch (e) {}
     return countriesData;
   });
   const [countryQuery, setCountryQuery] = useState("");
@@ -193,7 +193,6 @@ export default function InvestorSettingsPage() {
     c.toLowerCase().includes(countryQuery.trim().toLowerCase())
   );
 
-
   if (isLoading) {
     return (
       <div className="flex h-screen">
@@ -219,8 +218,8 @@ export default function InvestorSettingsPage() {
               Investment Thesis
             </h1>
             <p className="text-muted-foreground">
-              Configure your investment preferences to improve deal flow matching
-              and relevance scoring
+              Configure your investment preferences to improve deal flow
+              matching and relevance scoring
             </p>
           </div>
 
@@ -260,11 +259,8 @@ export default function InvestorSettingsPage() {
                       className="flex items-center gap-1"
                     >
                       {s}
-                      <span
-                        onClick={() => removeItem("sectors", s)}>
-                        <X
-                          className="h-3 w-3 cursor-pointer"
-                        />
+                      <span onClick={() => removeItem("sectors", s)}>
+                        <X className="h-3 w-3 cursor-pointer" />
                       </span>
                     </Badge>
                   ))}
@@ -319,11 +315,8 @@ export default function InvestorSettingsPage() {
                         className="h-3 w-3 cursor-pointer"
                         onClick={() => removeItem("stages", s)}
                       /> */}
-                      <span
-                        onClick={() => removeItem("stages", s)}>
-                        <X
-                          className="h-3 w-3 cursor-pointer"
-                        />
+                      <span onClick={() => removeItem("stages", s)}>
+                        <X className="h-3 w-3 cursor-pointer" />
                       </span>
                     </Badge>
                   ))}
@@ -336,13 +329,18 @@ export default function InvestorSettingsPage() {
                     <SelectValue placeholder="Add a funding stage" />
                   </SelectTrigger>
                   <SelectContent>
-                    {["Pre-Seed", "Seed", "Series A", "Series B", "Series C+"].map(
-                      (stage) => (
-                        <SelectItem key={stage} value={stage}>
-                          {stage}
-                        </SelectItem>
-                      )
-                    )}
+                    {[
+                      "Pre-Seed",
+                      "Pre-Sector A",
+                      "Seed",
+                      "Series A",
+                      "Series B",
+                      "Series C+",
+                    ].map((stage) => (
+                      <SelectItem key={stage} value={stage}>
+                        {stage}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </CardContent>
@@ -430,7 +428,9 @@ export default function InvestorSettingsPage() {
                       className="w-full text-left px-3 py-1 border rounded-md bg-white"
                     >
                       {countryQuery ? (
-                        <span className="text-sm text-foreground">{countryQuery}</span>
+                        <span className="text-sm text-foreground">
+                          {countryQuery}
+                        </span>
                       ) : (
                         <span className="text-sm text-muted-foreground">
                           {thesis.geographies.length > 0
@@ -476,10 +476,11 @@ export default function InvestorSettingsPage() {
                             filteredCountries.map((country) => (
                               <div
                                 key={country}
-                                className={`flex w-full cursor-pointer items-center justify-between px-2 py-2 hover:bg-slate-50 ${thesis.geographies.includes(country)
-                                  ? "opacity-60"
-                                  : ""
-                                  }`}
+                                className={`flex w-full cursor-pointer items-center justify-between px-2 py-2 hover:bg-slate-50 ${
+                                  thesis.geographies.includes(country)
+                                    ? "opacity-60"
+                                    : ""
+                                }`}
                                 onClick={() => {
                                   addItem("geographies", country);
                                   setDropdownOpen(false);
@@ -502,13 +503,13 @@ export default function InvestorSettingsPage() {
               </CardContent>
             </Card>
 
-
             {/* Keywords */}
             <Card>
               <CardHeader>
                 <CardTitle>Positive Keywords</CardTitle>
                 <CardDescription>
-                  Keywords that increase relevance when found in startup descriptions
+                  Keywords that increase relevance when found in startup
+                  descriptions
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -524,11 +525,8 @@ export default function InvestorSettingsPage() {
                         className="h-3 w-3 cursor-pointer"
                         onClick={() => removeItem("keywords", k)}
                       /> */}
-                      <span
-                        onClick={() => removeItem("keywords", k)}>
-                        <X
-                          className="h-3 w-3 cursor-pointer"
-                        />
+                      <span onClick={() => removeItem("keywords", k)}>
+                        <X className="h-3 w-3 cursor-pointer" />
                       </span>
                     </Badge>
                   ))}
@@ -538,7 +536,11 @@ export default function InvestorSettingsPage() {
                     placeholder="e.g., B2B, SaaS, AI, machine learning"
                     value={newKeyword}
                     onChange={(e) => setNewKeyword(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addItem("keywords", newKeyword) && setNewKeyword("")}
+                    onKeyDown={(e) =>
+                      e.key === "Enter" &&
+                      addItem("keywords", newKeyword) &&
+                      setNewKeyword("")
+                    }
                   />
                   <Button
                     onClick={() => {
@@ -558,7 +560,8 @@ export default function InvestorSettingsPage() {
               <CardHeader>
                 <CardTitle>Excluded Keywords</CardTitle>
                 <CardDescription>
-                  Keywords that decrease relevance when found in startup descriptions
+                  Keywords that decrease relevance when found in startup
+                  descriptions
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -574,11 +577,8 @@ export default function InvestorSettingsPage() {
                         className="h-3 w-3 cursor-pointer"
                         onClick={() => removeItem("excludedKeywords", k)}
                       /> */}
-                      <span
-                        onClick={() => removeItem("excludedKeywords", s)}>
-                        <X
-                          className="h-3 w-3 cursor-pointer"
-                        />
+                      <span onClick={() => removeItem("excludedKeywords", s)}>
+                        <X className="h-3 w-3 cursor-pointer" />
                       </span>
                     </Badge>
                   ))}
@@ -588,7 +588,11 @@ export default function InvestorSettingsPage() {
                     placeholder="e.g., B2C, consumer, retail"
                     value={newExcludedKeyword}
                     onChange={(e) => setNewExcludedKeyword(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addItem("excludedKeywords", newExcludedKeyword) && setNewExcludedKeyword("")}
+                    onKeyDown={(e) =>
+                      e.key === "Enter" &&
+                      addItem("excludedKeywords", newExcludedKeyword) &&
+                      setNewExcludedKeyword("")
+                    }
                   />
                   <Button
                     onClick={() => {
@@ -605,7 +609,11 @@ export default function InvestorSettingsPage() {
 
             {/* Save & Re-match */}
             <div className="flex gap-4">
-              <Button onClick={handleSave} disabled={isSaving} className="flex-1">
+              <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="flex-1"
+              >
                 <Save className="h-4 w-4 mr-2" />
                 {isSaving ? "Saving..." : "Save Investment Thesis"}
               </Button>
