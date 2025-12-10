@@ -10,7 +10,7 @@ export async function GET() {
             return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
         }
 
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+        const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
         return NextResponse.json({
             link: `${baseUrl}/form/${session.user.id}`,
