@@ -19,6 +19,7 @@ export default function Page() {
   const [selectedStartup, setSelectedStartup] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [Clicked, setClicked] = useState(false);
 
   const [emailContent, setEmailContent] = useState({
     to: "",
@@ -131,7 +132,6 @@ export default function Page() {
     return startup;
   }
 
-
   // -------------------------------------
   // LOAD LEADS AFTER THESIS LOADED
   // -------------------------------------
@@ -140,7 +140,9 @@ export default function Page() {
 
     const fetchLeads = async () => {
       try {
-        const res = await fetch("/api/investor/my-leads", { cache: "no-store" });
+        const res = await fetch("/api/investor/my-leads", {
+          cache: "no-store",
+        });
         if (!res.ok) throw new Error("Failed to fetch leads");
 
         const raw = await res.json();
@@ -157,7 +159,7 @@ export default function Page() {
           );
           return { ...startup, relevanceScore: Number(score) || 0 };
         });
-        console.log('0000000000', updated);
+        console.log("0000000000", updated);
 
         setLeads(updated);
       } catch (err) {
@@ -169,7 +171,6 @@ export default function Page() {
 
     fetchLeads();
   }, [investorThesis]);
-
 
   // -------------------------------------
   // SEND EMAIL
@@ -212,114 +213,138 @@ export default function Page() {
   // -------------------------------------
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-
       <InvestorSidebar />
 
       <div className="flex-1 overflow-auto">
-
         {/* HEADER */}
         <header className="sticky top-0 z-10 border-b bg-white pr-10">
           <div className="flex h-16 items-center justify-between px-8">
             <div>
               <h1 className="text-2xl font-bold">Pitch Connects</h1>
               <p className="text-sm text-gray-600">
-                 An overview of your pitches.
+                An overview of your pitches.
               </p>
             </div>
-            <Button className="text-xs bg-transparent border  border-gray-300 hover:bg-gray-100 text-gray-800" onClick={() => setScannerModal(true)}>
+            <Button
+              className="text-xs bg-transparent border  border-gray-300 hover:bg-gray-100 text-gray-800"
+              onClick={() => setScannerModal(true)}
+            >
               {/* <Bell className="h-5 w-5" /> */}
               Create Scanner
             </Button>
           </div>
         </header>
 
-
-
         {/* LEADS TABLE */}
         <div className="p-8 max-w-7xl mx-auto">
           <div className="py-8">
-            {/* {leads.length > 0 ? ( */}
-            <div className="overflow-hidden rounded-xl border bg-white">
+            {leads.length > 0 ? (
+              <div className="overflow-hidden rounded-xl border bg-white">
+                <table className="w-full border-collapse">
+                  <thead className="bg-emerald-50/60 text-gray-600 text-sm">
+                    <tr>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Company
+                      </th>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Founder
+                      </th>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Stage
+                      </th>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Relevancy
+                      </th>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
 
-              <table className="w-full border-collapse">
-                <thead className="bg-emerald-50/60 text-gray-600 text-sm">
-                  <tr>
-                    <th className="px-6 py-3 text-left font-semibold">Company</th>
-                    <th className="px-6 py-3 text-left font-semibold">Founder</th>
-                    <th className="px-6 py-3 text-left font-semibold">Stage</th>
-                    <th className="px-6 py-3 text-left font-semibold">Relevancy</th>
-                    <th className="px-6 py-3 text-left font-semibold">Status</th>
-                    <th className="px-6 py-3 text-left font-semibold">Actions</th>
-                  </tr>
-                </thead>
+                  <tbody className="divide-y">
+                    {leads.map((startup) => {
+                      return (
+                        <tr key={startup._id} className="hover:bg-emerald-50">
+                          <td className="text-sm px-6 py-4 font-medium">
+                            <p>{startup.startupName}</p>
+                            <Badge className="mt-1 bg-emerald-100 text-emerald-700">
+                              {startup.sector}
+                            </Badge>
+                          </td>
 
-                <tbody className="divide-y">
-                  {leads.map((startup) => {
-                    return (
-                      <tr key={startup._id} className="hover:bg-emerald-50">
+                          <td className="text-sm px-6 py-4 font-medium">
+                            {startup.founderName}
+                          </td>
 
-                        <td className="text-sm px-6 py-4 font-medium">
-                          <p>{startup.startupName}</p>
-                          <Badge className="mt-1 bg-emerald-100 text-emerald-700">{startup.sector}</Badge>
-                        </td>
+                          <td className="text-sm px-6 py-4 font-medium">
+                            {startup.stage}
+                          </td>
 
-                        <td className="text-sm px-6 py-4 font-medium">{startup.founderName}</td>
+                          <td className="text-sm px-6 py-4 font-medium">
+                            <div className="flex items-center gap-3">
+                              <Progress
+                                value={startup.relevanceScore}
+                                className="h-2 w-24"
+                              />
+                              <span>{startup.relevanceScore}%</span>
+                            </div>
+                          </td>
 
-                        <td className="text-sm px-6 py-4 font-medium">{startup.stage}</td>
+                          <td className="text-sm px-6 py-4 font-medium">
+                            <Badge className="bg-white-600 border-gray-300 hover:bg-gray-100 text-gray-800">
+                              {startup.status || "Submitted"}
+                            </Badge>
+                          </td>
 
-                        <td className="text-sm px-6 py-4 font-medium">
-                          <div className="flex items-center gap-3">
-                            <Progress value={startup.relevanceScore} className="h-2 w-24" />
-                            <span>{startup.relevanceScore}%</span>
-                          </div>
-                        </td>
+                          <td className="text-sm px-6 py-4 font-medium flex gap-2">
+                            <Button
+                              variant="default"
+                              className="text-xs bg-transparent border  border-gray-300 hover:bg-gray-100 text-gray-800"
+                              disabled={startup.status === "contacted"}
+                              onClick={() => {
+                                setSelectedStartup(startup);
+                                setEmailContent({
+                                  to: startup.email,
+                                  subject: `Regarding Investment Opportunity in ${startup.startupName}`,
+                                  body: `Hi ${startup.founderName},\n\nI am interested in knowing more about your startup.\n`,
+                                });
+                                setIsEmailModalOpen(true);
+                              }}
+                            >
+                              {startup.status === "contacted"
+                                ? "Mail Sent"
+                                : "Mail Founder"}
+                            </Button>
 
-                        <td className="text-sm px-6 py-4 font-medium">
-                          <Badge className="bg-white-600 border-gray-300 hover:bg-gray-100 text-gray-800">{startup.status || 'Submitted'}</Badge>
-                        </td>
-
-                        <td className="text-sm px-6 py-4 font-medium flex gap-2">
-
-                          <Button
-                            variant="default"
-                            className="text-xs bg-transparent border  border-gray-300 hover:bg-gray-100 text-gray-800"
-                            disabled={startup.status === "contacted"}
-                            onClick={() => {
-                              setSelectedStartup(startup);
-                              setEmailContent({
-                                to: startup.email,
-                                subject: `Regarding Investment Opportunity in ${startup.startupName}`,
-                                body: `Hi ${startup.founderName},\n\nI am interested in knowing more about your startup.\n`,
-                              });
-                              setIsEmailModalOpen(true);
-                            }}
-                          >
-                            {startup.status === "contacted" ? "Mail Sent" : "Mail Founder"}
-                          </Button>
-
-                          <Button
-                            className="text-xs bg-emerald-600 text-white"
-                            onClick={() => {
-                              setSelectedStartup(startup);
-                              setIsModalOpen(true);
-                            }}
-                          >
-                            View Details
-                          </Button>
-
-                        </td>
-
-                      </tr>
-                    )
-                  }
-                  )}
-                </tbody>
-              </table>
-
-            </div>
-            {/* ) : (
-              <div className="text-center py-20 text-gray-500">Loading Pitches...</div>
-            )} */}
+                            <Button
+                              className="text-xs bg-emerald-600 text-white"
+                              onClick={() => {
+                                setSelectedStartup(startup);
+                                setIsModalOpen(true);
+                              }}
+                            >
+                              View Details
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-16 text-center text-gray-500 font-medium">
+                <div className="flex-1 flex h-[60vh] items-center justify-center">
+                  <div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
+                    <p className="text-xl">Loading Pitches...</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -351,8 +376,7 @@ export default function Page() {
                   </p> */}
                   <p>
                     <span className="font-semibold">Funding Requirement:</span>{" "}
-                    ₹{selectedStartup.fundingRequirement.min}{" "}
-                    – ₹
+                    ₹{selectedStartup.fundingRequirement.min} – ₹
                     {selectedStartup.fundingRequirement.max}
                   </p>
                   <p>
@@ -478,28 +502,62 @@ export default function Page() {
         </DialogContent>
       </Dialog>
 
-
       {/* scanner modal */}
       <Dialog open={ScannerModal} onOpenChange={setScannerModal}>
         <DialogContent className="max-w-lg w-full p-6 bg-white rounded shadow-xl">
           <DialogHeader>
             <DialogTitle>Your Scanner</DialogTitle>
             <DialogDescription>
-              Send this scanner link or QR to founders to let them submit their startups
+              Send this scanner link or QR to founders to let them submit their
+              startups
             </DialogDescription>
           </DialogHeader>
 
           {/* QR SECTION */}
           <div className="mb-6 flex flex-col items-center justify-center gap-4 px-8 pt-4 border-t">
-            <div>
+            {/* QR IMAGE + DOWNLOAD */}
+            <div className="flex flex-col items-center gap-2">
               <p className="font-medium mb-1">Your Scanner QR:</p>
-              {qrUrl && <img src={qrUrl} className="w-32 h-32" />}
+
+              {qrUrl && (
+                <>
+                  <img src={qrUrl} className="w-32 h-32 border rounded" />
+
+                  {/* DOWNLOAD QR BUTTON */}
+                  <a
+                    href={qrUrl}
+                    download="scanner-qr.png"
+                    className="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Download QR
+                  </a>
+                </>
+              )}
             </div>
-            <div>
-              <p className="font-medium mb-1 text-center">Or share this link:</p>
-              <a href={scannerLink} className="text-blue-600 underline" target="_blank">
+
+            {/* LINK + COPY */}
+            <div className="flex flex-col items-center">
+              <p className="font-medium mb-1 text-center">
+                Or share this link:
+              </p>
+              <a
+                href={scannerLink}
+                className="text-blue-600 underline break-all text-center"
+                target="_blank"
+              >
                 {scannerLink}
               </a>
+
+              {/* COPY LINK BUTTON */}
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(scannerLink);
+                  setClicked(true);
+                }}
+                className="mt-2 text-sm px-3 py-1 bg-gray-800 text-white rounded hover:bg-gray-900 cursor-pointer"
+              >
+                {Clicked ? "Copied!" : "Copy Link"}
+              </button>
             </div>
           </div>
         </DialogContent>

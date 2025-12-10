@@ -5,60 +5,41 @@ import { getInvestorThesisByEmail } from "../investor/thesis/route";
 
 export const dynamic = "force-dynamic";
 
-// ------------------ Gmail Fetch Helper ------------------
-
-async function fetchGmailJson(url, accessToken, context = "GMAIL") {
-  try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      console.error(`❌ ${context} failed`, {
-        url,
-        status: res.status,
-        statusText: res.statusText,
-        body: text,
-      });
-      return { ok: false, data: null };
-    }
-
-    const data = await res.json();
-    return { ok: true, data };
-  } catch (err) {
-    console.error(`🔥 ${context} exception`, { url, error: err });
-    return { ok: false, data: null };
-  }
-}
-
 // ------------------ Enhanced Utils ------------------
 
 function decodeBase64Safe(base64String) {
   if (!base64String) return "";
   try {
+    // Clean the base64 string
     const cleanBase64 = base64String
       .replace(/-/g, "+")
       .replace(/_/g, "/")
       .replace(/\s/g, "")
       .replace(/[^A-Za-z0-9+/=]/g, "");
 
+    // Ensure the string length is a multiple of 4
     const paddedBase64 = cleanBase64.padEnd(
       cleanBase64.length + ((4 - (cleanBase64.length % 4)) % 4),
       "="
     );
 
     const buff = Buffer.from(paddedBase64, "base64");
+
+    // Convert to string with proper error handling
     let decoded = buff.toString("utf-8");
 
+    // Remove any remaining invalid UTF-8 sequences
     decoded = decoded
-      .replace(/[^\x00-\x7F]/g, "")
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+      .replace(/[^\x00-\x7F]/g, "") // Remove non-ASCII characters
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "") // Remove control characters
       .trim();
 
     return decoded;
   } catch (error) {
-    console.warn("Base64 decoding failed:", error?.message);
+    console.warn(
+      "Base64 decoding failed, returning empty string:",
+      error.message
+    );
     return "";
   }
 }
@@ -67,34 +48,36 @@ function extractBodySafe(payload) {
   if (!payload) return "";
 
   try {
-    // Direct body
+    // Try to get data from body first
     if (payload.body?.data) {
       const content = decodeBase64Safe(payload.body.data);
       if (content && content.trim().length > 0) return content;
     }
 
-    // Multipart
+    // Recursively search through parts
     if (payload.parts?.length) {
+      // Prefer HTML over plain text
       const htmlPart = payload.parts.find((p) => p.mimeType === "text/html");
       if (htmlPart?.body?.data) {
         const content = decodeBase64Safe(htmlPart.body.data);
         if (content && content.trim().length > 0) return content;
       }
 
+      // Fall back to plain text
       const textPart = payload.parts.find((p) => p.mimeType === "text/plain");
       if (textPart?.body?.data) {
         const content = decodeBase64Safe(textPart.body.data);
         if (content && content.trim().length > 0) return content;
       }
 
-      // Nested parts
+      // Recursively check nested parts
       for (const part of payload.parts) {
         const content = extractBodySafe(part);
         if (content && content.trim().length > 0) return content;
       }
     }
   } catch (error) {
-    console.warn("Error extracting body:", error?.message);
+    console.warn("Error extracting body:", error.message);
   }
 
   return "";
@@ -112,7 +95,7 @@ function extractAttachmentsSafe(payload, messageId) {
       ) {
         attachments.push({
           id: part.body.attachmentId,
-          filename: part.filename.replace(/[^\x20-\x7E]/g, ""),
+          filename: part.filename.replace(/[^\x20-\x7E]/g, ""), // Clean filename
           mimeType: part.mimeType || "application/octet-stream",
           size: part.body.size || "Unknown size",
           url: `/api/gmail/attachments/${messageId}/${part.body.attachmentId}`,
@@ -124,11 +107,11 @@ function extractAttachmentsSafe(payload, messageId) {
       }
     }
 
-    if (payload?.parts) {
+    if (payload.parts) {
       payload.parts.forEach(processPart);
     }
   } catch (error) {
-    console.warn("Error extracting attachments:", error?.message);
+    console.warn("Error extracting attachments:", error.message);
   }
 
   return attachments;
@@ -142,13 +125,13 @@ function cleanTextForMongoDB(text) {
   try {
     return text
       .toString()
-      .replace(/[^\x20-\x7E\t\n\r]/g, "") // printable ASCII + whitespace
-      .replace(/\x00/g, "") // null bytes
-      .replace(/\s+/g, " ")
+      .replace(/[^\x20-\x7E\t\n\r]/g, "") // Keep only printable ASCII + whitespace
+      .replace(/\x00/g, "") // Remove null bytes
+      .replace(/\s+/g, " ") // Normalize whitespace
       .trim()
-      .substring(0, 50000);
+      .substring(0, 50000); // Limit length
   } catch (error) {
-    console.warn("Text cleaning failed:", error?.message);
+    console.warn("Text cleaning failed:", error.message);
     return "Content unavailable";
   }
 }
@@ -165,14 +148,10 @@ function cleanEmailData(emailData) {
     relevanceScore: emailData.relevanceScore || 0,
     timestamp: emailData.timestamp,
     attachments: emailData.attachments || [],
-    isRead: emailData.isRead ?? false,
-    isStarred: emailData.isStarred ?? false,
+    isRead: emailData.isRead || false,
+    isStarred: emailData.isStarred || false,
     createdAt: emailData.createdAt || new Date(),
     links: emailData.links || [],
-
-    // threading
-    threadId: emailData.threadId || null,
-    replies: emailData.replies || [],
   };
 }
 
@@ -229,10 +208,17 @@ function detectSector(from, subject, body) {
       }
     }
   } catch (error) {
-    console.warn("Sector detection failed:", error?.message);
+    console.warn("Sector detection failed:", error.message);
   }
 
   return "General";
+}
+
+function defaultStatus(sector) {
+  if (sector === "Investor") return "Under Evaluation";
+  if (sector === "Fintech") return "New";
+  if (sector === "Startup") return "Contacted";
+  return "Pending";
 }
 
 function determineStatus({ accepted, rejected, isRead }) {
@@ -246,13 +232,11 @@ function determineStatus({ accepted, rejected, isRead }) {
 
 function computeRelevance(email, thesis) {
   try {
-    if (!thesis) return 0;
-
     const text = (email.subject + " " + email.content).toLowerCase();
     let score = 0;
     let maxScore = 0;
 
-    // Sector
+    // 🎯 Sector match
     maxScore += 30;
     if (
       thesis.sectors?.some((s) =>
@@ -262,7 +246,7 @@ function computeRelevance(email, thesis) {
       score += 30;
     }
 
-    // Keywords
+    // 🔑 Keyword match
     maxScore += 40;
     if (thesis.keywords?.length) {
       const keywordMatches = thesis.keywords.filter((kw) =>
@@ -271,7 +255,7 @@ function computeRelevance(email, thesis) {
       score += Math.min(40, (keywordMatches / thesis.keywords.length) * 40);
     }
 
-    // Excluded
+    // 🚫 Excluded keyword penalty
     if (thesis.excludedKeywords?.length) {
       const excludedMatches = thesis.excludedKeywords.filter((kw) =>
         text.includes(kw.toLowerCase())
@@ -279,7 +263,7 @@ function computeRelevance(email, thesis) {
       score -= excludedMatches * 15;
     }
 
-    // Geography
+    // 🌍 Geography match
     maxScore += 20;
     if (thesis.geographies?.length) {
       const geoMatches = thesis.geographies.filter((g) =>
@@ -291,15 +275,16 @@ function computeRelevance(email, thesis) {
     const relevance = Math.max(0, Math.min(100, (score / maxScore) * 100));
     return Math.round(relevance);
   } catch (error) {
-    console.warn("Relevance computation failed:", error?.message);
+    console.warn("Relevance computation failed:", error.message);
     return 0;
   }
 }
 
-// ------------------ DB Helpers ------------------
+// ------------------ Database Operations ------------------
 
 async function getExistingEmailSafe(collection, gmailId) {
   try {
+    // Use projection to limit fields and avoid BSON parsing issues
     const existing = await collection.findOne(
       { gmailId },
       {
@@ -317,9 +302,6 @@ async function getExistingEmailSafe(collection, gmailId) {
           isRead: 1,
           isStarred: 1,
           createdAt: 1,
-          links: 1,
-          threadId: 1,
-          replies: 1,
         },
       }
     );
@@ -330,72 +312,30 @@ async function getExistingEmailSafe(collection, gmailId) {
   } catch (error) {
     console.warn(
       `Error fetching email ${gmailId} from database:`,
-      error?.message
+      error.message
     );
+    // If there's corrupted data, delete it so it can be recreated
     try {
       await collection.deleteOne({ gmailId });
     } catch (deleteError) {
       console.warn(
         `Failed to delete corrupted email ${gmailId}:`,
-        deleteError?.message
+        deleteError.message
       );
     }
   }
   return null;
 }
 
+
 function extractLinksFromText(text = "") {
   if (!text) return [];
+
+  // Extract links: http, https, or www
   const urlRegex = /(https?:\/\/[^\s"'<>]+|www\.[^\s"'<>]+)/gi;
   return text.match(urlRegex) || [];
 }
 
-// ------------------ Thread Replies ------------------
-
-async function getThreadReplies(threadId, accessToken) {
-  if (!threadId) return [];
-
-  const url = `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`;
-  const { ok, data } = await fetchGmailJson(url, accessToken, "THREAD_DETAIL");
-
-  if (!ok || !data) return [];
-
-  try {
-    const messages = data.messages || [];
-    if (!messages.length) return [];
-
-    const originalId = messages[0].id;
-    const replies = [];
-
-    for (const msg of messages) {
-      if (msg.id === originalId) continue;
-
-      const headers = msg.payload?.headers || [];
-      const subject =
-        headers.find((h) => h.name === "Subject")?.value || "(no subject)";
-      const fromHeader =
-        headers.find((h) => h.name === "From")?.value || "(unknown sender)";
-      const date = headers.find((h) => h.name === "Date")?.value || "";
-
-      const content = extractBodySafe(msg.payload);
-
-      replies.push({
-        id: msg.id,
-        subject: cleanTextForMongoDB(subject),
-        from: cleanTextForMongoDB(fromHeader),
-        date,
-        content: cleanTextForMongoDB(content),
-      });
-    }
-
-    // newest reply first (optional)
-    replies.sort((a, b) => new Date(b.date) - new Date(a.date));
-    return replies;
-  } catch (error) {
-    console.warn("Error parsing thread replies:", error?.message);
-    return [];
-  }
-}
 
 // ------------------ Main Handler ------------------
 
@@ -414,38 +354,37 @@ export async function GET(request) {
     const rejectedCollection = db.collection("rejected_pitches");
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
     const offset = (page - 1) * limit;
 
     const thesis = await getInvestorThesisByEmail(session.user.email);
 
     const query =
       "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
-
-    const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
-      query
-    )}`;
-    const { ok: listOk, data: listData } = await fetchGmailJson(
-      listUrl,
-      session.accessToken,
-      "MESSAGE_LIST"
+    const listRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
+        query
+      )}`,
+      { headers: { Authorization: `Bearer ${session.accessToken}` } }
     );
 
-    if (!listOk || !listData) {
+    if (!listRes.ok) {
+      const errorText = await listRes.text();
       return new Response(
         JSON.stringify({
           error: "Failed to fetch Gmail list",
+          details: errorText,
         }),
         { status: 502 }
       );
     }
 
+    const listData = await listRes.json();
     const allMessages = listData.messages || [];
     const paginatedMessages = allMessages.slice(offset, offset + limit);
     const gmailIds = paginatedMessages.map((m) => m.id);
 
-    // Accepted / Rejected lookup
     const [accepted, rejected] = await Promise.all([
       acceptedCollection
         .find({ userEmail: session.user.email, emailId: { $in: gmailIds } })
@@ -459,13 +398,7 @@ export async function GET(request) {
     const rejectedIds = new Set(rejected.map((r) => r.emailId));
 
     const emailPromises = paginatedMessages.map(async (msg) => {
-      // 1. Try DB cache
       let existing = await getExistingEmailSafe(emailsCollection, msg.id);
-
-      // If existing but without threadId (old data), force refetch to enable replies
-      if (existing && !existing.threadId) {
-        existing = null;
-      }
 
       if (existing) {
         existing.accepted = acceptedIds.has(existing.gmailId);
@@ -476,26 +409,19 @@ export async function GET(request) {
           isRead: existing.isRead,
         });
 
-        // refresh links and replies
+        // 🔗 Add links also for existing emails
         existing.links = extractLinksFromText(existing.content || "");
-        existing.replies = await getThreadReplies(
-          existing.threadId,
-          session.accessToken
-        );
 
         return existing;
       }
 
-      // 2. Fetch fresh from Gmail
-      const messageUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`;
-      const { ok: msgOk, data: detail } = await fetchGmailJson(
-        messageUrl,
-        session.accessToken,
-        "MESSAGE_DETAIL"
+      const detailRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+        { headers: { Authorization: `Bearer ${session.accessToken}` } }
       );
+      if (!detailRes.ok) return null;
 
-      if (!msgOk || !detail) return null;
-
+      const detail = await detailRes.json();
       const headers = detail.payload?.headers || [];
       const subject =
         headers.find((h) => h.name === "Subject")?.value || "(no subject)";
@@ -517,13 +443,10 @@ export async function GET(request) {
       const cleanedSubject = cleanTextForMongoDB(subject);
       const cleanedBody = cleanTextForMongoDB(rawBody);
       const sector = detectSector(fromEmail, cleanedSubject, cleanedBody);
-      const isRead = !detail.labelIds?.includes("UNREAD");
-      const isStarred = detail.labelIds?.includes("STARRED") || false;
-
       const status = determineStatus({
         accepted: acceptedIds.has(msg.id),
         rejected: rejectedIds.has(msg.id),
-        isRead,
+        isRead: !detail.labelIds?.includes("UNREAD"),
       });
 
       const relevanceScore = computeRelevance(
@@ -531,9 +454,8 @@ export async function GET(request) {
         thesis
       );
 
-      const threadId = detail.threadId || null;
+      // 🔗 EXTRACT LINKS HERE
       const links = extractLinksFromText(cleanedBody);
-      const replies = await getThreadReplies(threadId, session.accessToken);
 
       const newEmail = cleanEmailData({
         gmailId: msg.id,
@@ -543,15 +465,17 @@ export async function GET(request) {
         sector,
         status,
         relevanceScore,
-        timestamp: date ? new Date(date).toISOString() : new Date().toISOString(),
+        timestamp: new Date(date).toISOString(),
         content: cleanedBody,
         attachments,
-        isRead,
-        isStarred,
+        isRead: !detail.labelIds?.includes("UNREAD"),
+        isStarred: detail.labelIds?.includes("STARRED") || false,
         createdAt: new Date(),
+        accepted: acceptedIds.has(msg.id),
+        rejected: rejectedIds.has(msg.id),
+
+        // 🔗 SAVE LINKS TO DB
         links,
-        threadId,
-        replies,
       });
 
       return newEmail;
@@ -559,7 +483,6 @@ export async function GET(request) {
 
     const emailResults = await Promise.allSettled(emailPromises);
 
-    // Bulk upsert into DB
     const bulkOps = emailResults
       .filter((r) => r.status === "fulfilled" && r.value)
       .map((r) => ({
@@ -571,10 +494,10 @@ export async function GET(request) {
       }));
 
     if (bulkOps.length > 0) {
-      await emailsCollection.bulkWrite(bulkOps, { ordered: false });
+      await emailsCollection.bulkWrite(bulkOps);
     }
 
-    // Final response
+    // 🔗 Final returned response includes links
     const sanitized = emailResults
       .filter((r) => r.status === "fulfilled" && r.value)
       .map((r) => {
