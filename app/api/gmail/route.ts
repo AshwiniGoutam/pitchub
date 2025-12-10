@@ -151,6 +151,7 @@ function cleanEmailData(emailData) {
     isRead: emailData.isRead || false,
     isStarred: emailData.isStarred || false,
     createdAt: emailData.createdAt || new Date(),
+    links: emailData.links || [],
   };
 }
 
@@ -326,6 +327,16 @@ async function getExistingEmailSafe(collection, gmailId) {
   return null;
 }
 
+
+function extractLinksFromText(text = "") {
+  if (!text) return [];
+
+  // Extract links: http, https, or www
+  const urlRegex = /(https?:\/\/[^\s"'<>]+|www\.[^\s"'<>]+)/gi;
+  return text.match(urlRegex) || [];
+}
+
+
 // ------------------ Main Handler ------------------
 
 export async function GET(request) {
@@ -347,10 +358,8 @@ export async function GET(request) {
     const limit = parseInt(searchParams.get("limit") || "10");
     const offset = (page - 1) * limit;
 
-    // 1️⃣ Fetch investor thesis
     const thesis = await getInvestorThesisByEmail(session.user.email);
 
-    // 2️⃣ Fetch Gmail list
     const query =
       "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
     const listRes = await fetch(
@@ -376,7 +385,6 @@ export async function GET(request) {
     const paginatedMessages = allMessages.slice(offset, offset + limit);
     const gmailIds = paginatedMessages.map((m) => m.id);
 
-    // 3️⃣ Fetch accepted and rejected emails in parallel
     const [accepted, rejected] = await Promise.all([
       acceptedCollection
         .find({ userEmail: session.user.email, emailId: { $in: gmailIds } })
@@ -389,18 +397,21 @@ export async function GET(request) {
     const acceptedIds = new Set(accepted.map((a) => a.emailId));
     const rejectedIds = new Set(rejected.map((r) => r.emailId));
 
-    // 4️⃣ Fetch email details in parallel
     const emailPromises = paginatedMessages.map(async (msg) => {
       let existing = await getExistingEmailSafe(emailsCollection, msg.id);
+
       if (existing) {
         existing.accepted = acceptedIds.has(existing.gmailId);
         existing.rejected = rejectedIds.has(existing.gmailId);
-
         existing.status = determineStatus({
           accepted: existing.accepted,
           rejected: existing.rejected,
           isRead: existing.isRead,
         });
+
+        // 🔗 Add links also for existing emails
+        existing.links = extractLinksFromText(existing.content || "");
+
         return existing;
       }
 
@@ -443,6 +454,9 @@ export async function GET(request) {
         thesis
       );
 
+      // 🔗 EXTRACT LINKS HERE
+      const links = extractLinksFromText(cleanedBody);
+
       const newEmail = cleanEmailData({
         gmailId: msg.id,
         from,
@@ -459,6 +473,9 @@ export async function GET(request) {
         createdAt: new Date(),
         accepted: acceptedIds.has(msg.id),
         rejected: rejectedIds.has(msg.id),
+
+        // 🔗 SAVE LINKS TO DB
+        links,
       });
 
       return newEmail;
@@ -466,7 +483,6 @@ export async function GET(request) {
 
     const emailResults = await Promise.allSettled(emailPromises);
 
-    // 5️⃣ Prepare bulk DB writes
     const bulkOps = emailResults
       .filter((r) => r.status === "fulfilled" && r.value)
       .map((r) => ({
@@ -481,7 +497,7 @@ export async function GET(request) {
       await emailsCollection.bulkWrite(bulkOps);
     }
 
-    // 6️⃣ Sort by relevance and sanitize
+    // 🔗 Final returned response includes links
     const sanitized = emailResults
       .filter((r) => r.status === "fulfilled" && r.value)
       .map((r) => {

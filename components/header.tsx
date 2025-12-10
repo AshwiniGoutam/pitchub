@@ -96,9 +96,9 @@ export default function DashboardHeader({
                 <span>{pendingCount} email(s) in pending state</span>
               </div>
 
-              <ScrollArea className="max-h-80 overflow-y-scroll pr-2">
+              {/* <ScrollArea className="max-h-80 overflow-y-scroll pr-2">
                 <div className="space-y-2">
-                  {pendingEmails.map((email) => (
+                  {pendingEmails && pendingEmails?.map((email) => (
                     <div
                       key={email.id}
                       className="flex gap-3 rounded-md border bg-muted/40 p-3 text-sm"
@@ -130,7 +130,7 @@ export default function DashboardHeader({
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
+              </ScrollArea> */}
             </div>
           )}
         </DialogContent>

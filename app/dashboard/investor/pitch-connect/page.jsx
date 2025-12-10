@@ -10,71 +10,73 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Download, Mail } from "lucide-react";
+import { Bell, Download, Mail } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import ConnectionFilterDropdown from "@/components/ui/ConnectionFilterDropdown";
+import QRCode from "qrcode";
+import { MatchingEngine } from "@/lib/matching-engine";
 
 export default function Page() {
-  const [startups, setStartups] = useState([]);
   const [selectedStartup, setSelectedStartup] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+
   const [emailContent, setEmailContent] = useState({
     to: "",
     subject: "",
     body: "",
   });
+
   const [Loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("Pitch Connect");
-  const [deals, setDeals] = useState([]);
+  const [scannerLink, setScannerLink] = useState("");
+  const [qrUrl, setQrUrl] = useState("");
+
   const [investorThesis, setInvestorThesis] = useState(null);
+  const [leads, setLeads] = useState([]);
+  const [ScannerModal, setScannerModal] = useState(false);
 
-  const [debugInfo, setDebugInfo] = useState("");
-
+  // -------------------------------------
+  // LOAD SCANNER LINK + QR
+  // -------------------------------------
   useEffect(() => {
-    fetchInvestorThesis();
-    fetchStartups();
+    const generateLink = async () => {
+      const res = await fetch("/api/investor/scanner-link");
+      const data = await res.json();
+      setScannerLink(data.link);
+
+      const qr = await QRCode.toDataURL(data.link);
+      setQrUrl(qr);
+    };
+    generateLink();
   }, []);
 
-  // Fetch investor thesis
+  // -------------------------------------
+  // LOAD INVESTOR THESIS (FIXED)
+  // -------------------------------------
   const fetchInvestorThesis = async () => {
     try {
-      console.log("🔄 Fetching investor thesis...");
-      setDebugInfo("Fetching investor thesis...");
+      const res = await fetch("/api/investor/thesis", { cache: "no-store" });
 
-      const res = await fetch("/api/investor/thesis");
-      console.log("Thesis API response status:", res.status);
+      if (!res.ok) throw new Error("Thesis fetch failed");
 
-      if (res.ok) {
-        const thesis = await res.json();
-        console.log("✅ Thesis fetched successfully:", thesis);
-        setDebugInfo(
-          `Thesis loaded: ${JSON.stringify(thesis).substring(0, 100)}...`
-        );
-        setInvestorThesis(thesis);
+      const thesis = await res.json();
 
-        // Fetch startups after thesis is loaded
-        await fetchStartups(thesis);
-      } else {
-        console.error("❌ Failed to fetch thesis, status:", res.status);
-        setDebugInfo("Failed to fetch thesis, using default");
-        // Set a default thesis structure
-        const defaultThesis = {
-          sectors: [],
-          stages: [],
-          checkSizeMin: 0,
-          checkSizeMax: 0,
-          geographies: [],
-          keywords: [],
-          excludedKeywords: [],
-        };
-        setInvestorThesis(defaultThesis);
-        await fetchStartups(defaultThesis);
-      }
+      // SAFETY CHECK — ensure structure stays consistent
+      const safeThesis = {
+        sectors: thesis.sectors || [],
+        stages: thesis.stages || [],
+        checkSizeMin: thesis.checkSizeMin || 0,
+        checkSizeMax: thesis.checkSizeMax || 0,
+        geographies: thesis.geographies || [],
+        keywords: thesis.keywords || [],
+        excludedKeywords: thesis.excludedKeywords || [],
+      };
+
+      console.log("THESIS LOADED:", safeThesis);
+      setInvestorThesis(safeThesis);
     } catch (err) {
-      console.error("❌ Error fetching investor thesis:", err);
-      setDebugInfo("Error fetching thesis");
-      const defaultThesis = {
+      console.error("❌ Thesis Error:", err);
+
+      const fallback = {
         sectors: [],
         stages: [],
         checkSizeMin: 0,
@@ -83,196 +85,99 @@ export default function Page() {
         keywords: [],
         excludedKeywords: [],
       };
-      setInvestorThesis(defaultThesis);
-      await fetchStartups(defaultThesis);
+      setInvestorThesis(fallback);
     }
-  };
-
-  // Calculate relevancy score based on investor thesis
-  const calculateRelevancyScore = (startup, thesis) => {
-    console.log(`📊 Calculating score for: ${startup.name}`, {
-      startupSector: startup.sector,
-      startupStage: startup.stage,
-      startupFunding: startup.fundingRequirement,
-      startupLocation: startup.location,
-      thesis,
-    });
-
-    // defensive default thesis
-    if (!thesis || Object.keys(thesis).length === 0) {
-      console.log("⚠️ No thesis available, using default score 50");
-      return 50;
-    }
-
-    let score = 0;
-    let totalWeight = 0;
-    const weights = {
-      sector: 30,
-      stage: 25,
-      funding: 20,
-      geography: 15,
-      keywords: 10,
-    };
-
-    // normalize numbers for thesis check sizes
-    const thesisMin = Number(thesis.checkSizeMin || 0);
-    const thesisMax =
-      thesis.checkSizeMax === undefined || thesis.checkSizeMax === null
-        ? Infinity
-        : Number(thesis.checkSizeMax);
-
-    // Sector matching
-    if (thesis.sectors && thesis.sectors.length > 0 && startup.sector) {
-      const startupSector = startup.sector.toLowerCase().trim();
-      const matchedSector = thesis.sectors.some(
-        (sector) => sector.toLowerCase().trim() === startupSector
-      );
-      if (matchedSector) score += weights.sector;
-      totalWeight += weights.sector;
-    }
-
-    // Stage matching
-    if (thesis.stages && thesis.stages.length > 0 && startup.stage) {
-      const startupStage = startup.stage.toLowerCase().trim();
-      const matchedStage = thesis.stages.some(
-        (stage) => stage.toLowerCase().trim() === startupStage
-      );
-      if (matchedStage) score += weights.stage;
-      totalWeight += weights.stage;
-    }
-
-    // Funding range matching (handle number or object)
-    if (
-      (thesisMin !== undefined || thesisMax !== undefined) &&
-      startup.fundingRequirement
-    ) {
-      // startup.fundingRequirement might be a number, or {min,max}
-      let startupMin = 0;
-      let startupMax = Infinity;
-      if (typeof startup.fundingRequirement === "number") {
-        startupMin = startup.fundingRequirement;
-        startupMax = startup.fundingRequirement;
-      } else {
-        startupMin = Number(startup.fundingRequirement?.min || 0);
-        startupMax =
-          startup.fundingRequirement?.max === undefined
-            ? Infinity
-            : Number(startup.fundingRequirement?.max);
-      }
-
-      const fundingOverlap = startupMin <= thesisMax && startupMax >= thesisMin;
-      if (fundingOverlap) score += weights.funding;
-      totalWeight += weights.funding;
-    }
-
-    // Geography matching
-    if (
-      thesis.geographies &&
-      thesis.geographies.length > 0 &&
-      startup.location
-    ) {
-      const startupLocation = startup.location.toLowerCase();
-      const matchedGeo = thesis.geographies.some((geo) =>
-        startupLocation.includes(geo.toLowerCase())
-      );
-      if (matchedGeo) score += weights.geography;
-      totalWeight += weights.geography;
-    }
-
-    // Keyword matching
-    if (thesis.keywords && thesis.keywords.length > 0 && startup.description) {
-      const description = startup.description.toLowerCase();
-      const matchedKeywords = thesis.keywords.filter((keyword) =>
-        description.includes(keyword.toLowerCase())
-      );
-      const keywordScore =
-        (matchedKeywords.length / thesis.keywords.length) * weights.keywords;
-      if (matchedKeywords.length > 0) score += keywordScore;
-      totalWeight += weights.keywords;
-    }
-
-    // Excluded keywords penalty
-    let excludedPenalty = false;
-    if (
-      thesis.excludedKeywords &&
-      thesis.excludedKeywords.length > 0 &&
-      startup.description
-    ) {
-      const description = startup.description.toLowerCase();
-      const excludedMatches = thesis.excludedKeywords.filter((keyword) =>
-        description.includes(keyword.toLowerCase())
-      );
-      if (excludedMatches.length > 0) {
-        score *= 0.7; // 30% penalty
-        excludedPenalty = true;
-      }
-    }
-
-    const finalScore =
-      totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 50;
-    return Math.min(100, Math.max(0, finalScore));
-  };
-
-  const fetchStartups = async (thesisParam = null) => {
-    try {
-      const res = await fetch("/api/investor/startups", { cache: "no-store" });
-      const data = await res.json();
-
-      // choose the thesis passed in (from fetchInvestorThesis) or current state
-      const thesisToUse = thesisParam ||
-        investorThesis || {
-        sectors: [],
-        stages: [],
-        checkSizeMin: 0,
-        checkSizeMax: Infinity,
-        geographies: [],
-        keywords: [],
-        excludedKeywords: [],
-      };
-
-      // Calculate relevancy scores for each startup (pass thesis)
-      const startupsWithScores = data.map((startup) => ({
-        ...startup,
-        relevanceScore: calculateRelevancyScore(startup, thesisToUse),
-      }));
-
-      setStartups(startupsWithScores);
-    } catch (err) {
-      console.error("Error fetching startups:", err);
-    }
-  };
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
   };
 
   useEffect(() => {
-    if (activeTab === "Deals") {
-      fetchDeals();
-    }
-  }, [activeTab]);
+    fetchInvestorThesis();
+  }, []);
 
-  const fetchDeals = async () => {
+  // Normalize startup fields coming from server
+  function normalizeStartup(raw) {
+    if (!raw) return raw;
+
+    // defensive copies
+    const startup = { ...raw };
+
+    // Convert createdAt / updatedAt (which may be strings) to Date objects
     try {
-      const res = await fetch("/api/deals"); // your Pitch Accept API endpoint
-      const data = await res.json();
-      if (res.ok) {
-        setDeals(data.data); // assuming your API returns { data: [...] }
-      } else {
-        console.error("Failed to fetch deals:", data.error);
-      }
-    } catch (err) {
-      console.error("Error fetching deals:", err);
+      startup.createdAt =
+        raw.createdAt instanceof Date ? raw.createdAt : new Date(raw.createdAt);
+    } catch (e) {
+      startup.createdAt = new Date(); // fallback
     }
-  };
 
+    try {
+      startup.updatedAt =
+        raw.updatedAt instanceof Date ? raw.updatedAt : new Date(raw.updatedAt);
+    } catch (e) {
+      startup.updatedAt = new Date();
+    }
+
+    // Ensure fundingRequirement numbers (if used) are actual numbers
+    if (startup.fundingRequirement) {
+      const fr = startup.fundingRequirement;
+      startup.fundingRequirement = {
+        min: typeof fr.min === "number" ? fr.min : Number(fr.min) || 0,
+        max: typeof fr.max === "number" ? fr.max : Number(fr.max) || 0,
+      };
+    }
+
+    // Ensure relevanceScore is numeric
+    if (startup.relevanceScore != null) {
+      startup.relevanceScore = Number(startup.relevanceScore) || 0;
+    }
+    return startup;
+  }
+
+
+  // -------------------------------------
+  // LOAD LEADS AFTER THESIS LOADED
+  // -------------------------------------
+  useEffect(() => {
+    if (!investorThesis) return; // wait until thesis is loaded
+
+    const fetchLeads = async () => {
+      try {
+        const res = await fetch("/api/investor/my-leads", { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to fetch leads");
+
+        const raw = await res.json();
+
+        // Normalize every startup BEFORE passing to MatchingEngine
+        const normalized = raw.map((s) => normalizeStartup(s));
+
+        // Now compute relevance score safely (MatchingEngine expects Date objects)
+        const updated = normalized.map((startup) => {
+          // MatchingEngine.calculateRelevanceScore should accept the normalized startup
+          const { score } = MatchingEngine.calculateRelevanceScore(
+            startup,
+            investorThesis
+          );
+          return { ...startup, relevanceScore: Number(score) || 0 };
+        });
+        console.log('0000000000', updated);
+
+        setLeads(updated);
+      } catch (err) {
+        console.error("Leads Error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLeads();
+  }, [investorThesis]);
+
+
+  // -------------------------------------
+  // SEND EMAIL
+  // -------------------------------------
   const sendEmail = async () => {
     try {
       setLoading(true);
 
-      // 1️⃣ Send the actual email
       const res = await fetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -283,10 +188,8 @@ export default function Page() {
       });
 
       const data = await res.json();
-
       if (!res.ok) {
-        alert("Error sending email: " + data.message);
-        setLoading(false);
+        alert("Error: " + data.message);
         return;
       }
 
@@ -296,192 +199,132 @@ export default function Page() {
         body: JSON.stringify({ status: "contacted" }),
       });
 
-      // 3️⃣ Update UI locally
-      setStartups((prev) =>
-        prev.map((s) =>
-          s._id === selectedStartup?._id ? { ...s, status: "contacted" } : s
-        )
-      );
-
-      // 4️⃣ Reset states
       setLoading(false);
       setIsEmailModalOpen(false);
     } catch (err) {
       console.error(err);
       alert("Error sending email");
-      setLoading(false);
     }
   };
 
-  //  Filter startups based on active tab
-  const filteredStartups = startups.filter((s) => {
-    if (activeTab === "Pitch Connect") return true; // show ALL
-    if (activeTab === "Deals") return false; // handled by another API later
-    if (activeTab === "Archived") return s.status === "rejected";
-    return true;
-  });
-
+  // -------------------------------------
+  // UI RENDER
+  // -------------------------------------
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
+
       <InvestorSidebar />
 
       <div className="flex-1 overflow-auto">
-        {/* Header */}
-        <header className="sticky top-0 z-10 border-b bg-white">
+
+        {/* HEADER */}
+        <header className="sticky top-0 z-10 border-b bg-white pr-10">
           <div className="flex h-16 items-center justify-between px-8">
             <div>
-              <h1 className="text-2xl font-bold">Pitch Connect</h1>
+              <h1 className="text-2xl font-bold">Pitch Connects</h1>
               <p className="text-sm text-gray-600">
-                An overview of your pitches.
+                 An overview of your pitches.
               </p>
             </div>
+            <Button className="text-xs bg-transparent border  border-gray-300 hover:bg-gray-100 text-gray-800" onClick={() => setScannerModal(true)}>
+              {/* <Bell className="h-5 w-5" /> */}
+              Create Scanner
+            </Button>
           </div>
         </header>
 
+
+
+        {/* LEADS TABLE */}
         <div className="p-8 max-w-7xl mx-auto">
-          {/* <div className="flex items-center justify-end">
-            <ConnectionFilterDropdown
-              onChange={(value) => {
-                console.log("Selected connection type:", value);
-              }}
-            />
-          </div> */}
-
           <div className="py-8">
-            {activeTab === "Pitch Connect" && filteredStartups.length > 0 ? (
-              <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm bg-white">
-                <table className="w-full border-collapse">
-                  <thead className="bg-emerald-50/60 text-gray-600 text-sm">
-                    <tr>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Company
-                      </th>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Stage
-                      </th>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Connection Type
-                      </th>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Relevancy Score
-                      </th>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left font-semibold">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
+            {/* {leads.length > 0 ? ( */}
+            <div className="overflow-hidden rounded-xl border bg-white">
 
-                  <tbody className="divide-y divide-gray-100 text-gray-700">
-                    {filteredStartups.map((startup) => {
-                      console.log(startup);
+              <table className="w-full border-collapse">
+                <thead className="bg-emerald-50/60 text-gray-600 text-sm">
+                  <tr>
+                    <th className="px-6 py-3 text-left font-semibold">Company</th>
+                    <th className="px-6 py-3 text-left font-semibold">Founder</th>
+                    <th className="px-6 py-3 text-left font-semibold">Stage</th>
+                    <th className="px-6 py-3 text-left font-semibold">Relevancy</th>
+                    <th className="px-6 py-3 text-left font-semibold">Status</th>
+                    <th className="px-6 py-3 text-left font-semibold">Actions</th>
+                  </tr>
+                </thead>
 
-                      return (
-                        <tr
-                          key={startup._id}
-                          className="transition hover:bg-emerald-50/40"
-                        >
-                          <td className="text-sm px-6 py-4 font-medium">
-                            <p>{startup.name}</p>
-                            <Badge
-                              variant="secondary"
-                              className="mt-1 bg-primary/10 text-primary border-primary/20 font-medium"
-                            >
-                              {startup.sector}
-                            </Badge>
-                          </td>
-                          <td className="text-sm px-6 py-4">
-                            {startup.stage || "—"}
-                          </td>
-                          <td className="text-sm px-6 py-4 font-medium">
-                            Email
-                          </td>
-                          <td className="text-sm px-6 py-4 text-sm">
-                            <div className="flex items-center gap-3">
-                              <Progress
-                                value={startup?.relevanceScore || 80}
-                                className="h-2 w-24"
-                              />
-                              <span className="text-sm font-medium">
-                                {startup?.relevanceScore || 80}%
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            {startup.status === "submitted" && (
-                              <Badge className="bg-blue-100 text-blue-700">
-                                Submitted
-                              </Badge>
-                            )}
-                            {startup.status === "contacted" && (
-                              <Badge className="bg-emerald-100 text-emerald-700">
-                                Contacted
-                              </Badge>
-                            )}
-                            {startup.status === "under_review" && (
-                              <Badge className="bg-yellow-100 text-yellow-700">
-                                Under Review
-                              </Badge>
-                            )}
-                            {startup.status === "rejected" && (
-                              <Badge className="bg-red-100 text-red-700">
-                                Rejected
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <Button
-                              variant="default"
-                              className="w-25 mr-2 text-xs bg-white hover:bg-emerald-600 text-dark hover:text-white border border-[#ccc] font-medium"
-                              onClick={() => {
-                                setEmailContent({
-                                  to: startup.founderId,
-                                  subject: `Regarding Investment Opportunity in ${startup.name}`,
-                                  body: `Hi ${startup.name} Founder,\n\nI came across your startup and I'm interested in discussing potential investment opportunities.\n\nBest regards,\n[Your Name]`,
-                                });
-                                setIsEmailModalOpen(true);
-                                setSelectedStartup(startup);
-                              }}
-                              disabled={startup.status === "contacted"}
-                            >
-                              {startup.status === "contacted"
-                                ? "Mail Sent"
-                                : "Mail Founder"}
-                            </Button>
+                <tbody className="divide-y">
+                  {leads.map((startup) => {
+                    return (
+                      <tr key={startup._id} className="hover:bg-emerald-50">
 
-                            <Button
-                              variant="default"
-                              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                              onClick={() => {
-                                setSelectedStartup(startup);
-                                setIsModalOpen(true);
-                              }}
-                            >
-                              View Details
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="py-16 text-center text-gray-500 font-medium">
-                <div className="flex-1 flex h-[60vh] items-center justify-center">
-                  <div>
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
-                    <p className="text-xl">Loading Pitches...</p>
-                  </div>
-                </div>
-              </div>
-            )}
+                        <td className="text-sm px-6 py-4 font-medium">
+                          <p>{startup.startupName}</p>
+                          <Badge className="mt-1 bg-emerald-100 text-emerald-700">{startup.sector}</Badge>
+                        </td>
+
+                        <td className="text-sm px-6 py-4 font-medium">{startup.founderName}</td>
+
+                        <td className="text-sm px-6 py-4 font-medium">{startup.stage}</td>
+
+                        <td className="text-sm px-6 py-4 font-medium">
+                          <div className="flex items-center gap-3">
+                            <Progress value={startup.relevanceScore} className="h-2 w-24" />
+                            <span>{startup.relevanceScore}%</span>
+                          </div>
+                        </td>
+
+                        <td className="text-sm px-6 py-4 font-medium">
+                          <Badge className="bg-white-600 border-gray-300 hover:bg-gray-100 text-gray-800">{startup.status || 'Submitted'}</Badge>
+                        </td>
+
+                        <td className="text-sm px-6 py-4 font-medium flex gap-2">
+
+                          <Button
+                            variant="default"
+                            className="text-xs bg-transparent border  border-gray-300 hover:bg-gray-100 text-gray-800"
+                            disabled={startup.status === "contacted"}
+                            onClick={() => {
+                              setSelectedStartup(startup);
+                              setEmailContent({
+                                to: startup.email,
+                                subject: `Regarding Investment Opportunity in ${startup.startupName}`,
+                                body: `Hi ${startup.founderName},\n\nI am interested in knowing more about your startup.\n`,
+                              });
+                              setIsEmailModalOpen(true);
+                            }}
+                          >
+                            {startup.status === "contacted" ? "Mail Sent" : "Mail Founder"}
+                          </Button>
+
+                          <Button
+                            className="text-xs bg-emerald-600 text-white"
+                            onClick={() => {
+                              setSelectedStartup(startup);
+                              setIsModalOpen(true);
+                            }}
+                          >
+                            View Details
+                          </Button>
+
+                        </td>
+
+                      </tr>
+                    )
+                  }
+                  )}
+                </tbody>
+              </table>
+
+            </div>
+            {/* ) : (
+              <div className="text-center py-20 text-gray-500">Loading Pitches...</div>
+            )} */}
           </div>
         </div>
       </div>
 
+      {/* Your modals below remain unchanged */}
       {/* === MODALS remain unchanged === */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-6xl w-full max-h-[90vh] overflow-y-auto p-8 bg-white rounded shadow-2xl">
@@ -502,28 +345,28 @@ export default function Page() {
                     <span className="font-semibold">Location:</span>{" "}
                     {selectedStartup.location || "—"}
                   </p>
-                  <p>
+                  {/* <p>
                     <span className="font-semibold">Team Size:</span>{" "}
                     {selectedStartup.teamSize || "—"}
-                  </p>
+                  </p> */}
                   <p>
                     <span className="font-semibold">Funding Requirement:</span>{" "}
-                    ₹{selectedStartup.fundingRequirement?.min?.toLocaleString()}{" "}
+                    ₹{selectedStartup.fundingRequirement.min}{" "}
                     – ₹
-                    {selectedStartup.fundingRequirement?.max?.toLocaleString()}
+                    {selectedStartup.fundingRequirement.max}
                   </p>
                   <p>
                     <span className="font-semibold">Founder Email:</span>{" "}
-                    {selectedStartup.founderId}
+                    {selectedStartup.email}
                   </p>
                   <p>
                     <span className="font-semibold">Relevance Score:</span>{" "}
-                    {selectedStartup.relevanceScore}%
+                    {selectedStartup.relevanceScore || 80}%
                   </p>
                   <p>
                     <span className="font-semibold">Status:</span>{" "}
                     <Badge className="ml-1 bg-blue-100 text-blue-700 capitalize">
-                      {selectedStartup.status}
+                      {selectedStartup.status || "submitted"}
                     </Badge>
                   </p>
                 </div>
@@ -630,6 +473,33 @@ export default function Page() {
               <Button onClick={sendEmail}>
                 {Loading ? "Sending Email..." : "Send Email"}
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
+      {/* scanner modal */}
+      <Dialog open={ScannerModal} onOpenChange={setScannerModal}>
+        <DialogContent className="max-w-lg w-full p-6 bg-white rounded shadow-xl">
+          <DialogHeader>
+            <DialogTitle>Your Scanner</DialogTitle>
+            <DialogDescription>
+              Send this scanner link or QR to founders to let them submit their startups
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* QR SECTION */}
+          <div className="mb-6 flex flex-col items-center justify-center gap-4 px-8 pt-4 border-t">
+            <div>
+              <p className="font-medium mb-1">Your Scanner QR:</p>
+              {qrUrl && <img src={qrUrl} className="w-32 h-32" />}
+            </div>
+            <div>
+              <p className="font-medium mb-1 text-center">Or share this link:</p>
+              <a href={scannerLink} className="text-blue-600 underline" target="_blank">
+                {scannerLink}
+              </a>
             </div>
           </div>
         </DialogContent>

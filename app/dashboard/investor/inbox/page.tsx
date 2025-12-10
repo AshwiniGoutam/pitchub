@@ -15,6 +15,7 @@ import {
   CheckCircle,
   AlertCircle,
   Key,
+  Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +35,7 @@ import { toast } from "sonner";
 import Loading from "./loading";
 import { useUser } from "@/context/UserContext";
 import DashboardHeader from "@/components/header";
+import Link from "next/link";
 
 interface Email {
   id: string;
@@ -547,13 +549,12 @@ export default function InboxPage() {
     return (
       <div
         key={index}
-        className={`flex items-center justify-between p-3 border rounded-lg transition-all duration-200 ${
-          isDownloading
-            ? "bg-blue-50 border-blue-200"
-            : isDownloaded
+        className={`flex items-center justify-between p-3 border rounded-lg transition-all duration-200 ${isDownloading
+          ? "bg-blue-50 border-blue-200"
+          : isDownloaded
             ? "bg-green-50 border-green-200"
             : "hover:bg-gray-50 cursor-pointer"
-        }`}
+          }`}
         onClick={() =>
           !isDownloading &&
           downloadAttachment(attachment, selectedEmail?.subject || "")
@@ -621,6 +622,23 @@ export default function InboxPage() {
   // Show loading until sectors are predicted for current page
   const showLoading =
     emailsLoading || (emails.length > 0 && sectorsLoading) || thesisLoading;
+
+  function normalizeAndUniqueLinks(links = []) {
+    const normalize = (url) => {
+      try {
+        const u = new URL(url);
+        return `https://${u.hostname}${u.pathname.replace(/\/$/, "")}`;
+      } catch {
+        return url;
+      }
+    };
+
+    const normalized = links.map(normalize);
+    return [...new Set(normalized)];
+  }
+
+  const cleanLinks = normalizeAndUniqueLinks(selectedEmail?.links);
+
 
   if (emailsLoading) {
     return (
@@ -789,9 +807,8 @@ export default function InboxPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Inbox List - Fixed width that doesn't shrink */}
         <div
-          className={`${
-            selectedEmail ? "w-2/3" : "w-full"
-          } overflow-auto border-r bg-white transition-all`}
+          className={`${selectedEmail ? "w-2/3" : "w-full"
+            } overflow-auto border-r bg-white transition-all`}
         >
           {/* Header */}
           {/* <header className="sticky top-0 z-10 border-b bg-white">
@@ -842,9 +859,8 @@ export default function InboxPage() {
                         key={email.id}
                         onClick={() => handleEmailSelect(email)}
                         onDoubleClick={() => handleEmailDoubleClick(email)}
-                        className={`cursor-pointer transition-colors hover:bg-gray-50 ${
-                          selectedEmail?.id === email.id ? "bg-emerald-50" : ""
-                        }`}
+                        className={`cursor-pointer transition-colors hover:bg-gray-50 ${selectedEmail?.id === email.id ? "bg-emerald-50" : ""
+                          }`}
                       >
                         <td className="px-4 py-4 text-sm font-medium text-gray-900 whitespace-nowrap truncate max-w-[200px]">
                           {email.from}
@@ -875,19 +891,18 @@ export default function InboxPage() {
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap">
                           <Badge
-                            className={`${
-                              email?.status == "Contacted"
-                                ? "bg-blue-100 text-blue-700"
-                                : email?.status == "Under Evaluation"
+                            className={`${email?.status == "Contacted"
+                              ? "bg-blue-100 text-blue-700"
+                              : email?.status == "Under Evaluation"
                                 ? "bg-yellow-100 text-yellow-700"
                                 : email?.status == "Pending"
-                                ? "bg-[#F7CB73] text-red-700"
-                                : email?.status == "New"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : email?.status == "Rejected"
-                                ? "bg-[#D9512C] text-white"
-                                : ""
-                            }`}
+                                  ? "bg-[#F7CB73] text-red-700"
+                                  : email?.status == "New"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : email?.status == "Rejected"
+                                      ? "bg-[#D9512C] text-white"
+                                      : ""
+                              }`}
                           >
                             {email.status}
                           </Badge>
@@ -1020,23 +1035,23 @@ export default function InboxPage() {
                       </CardContent>
                     </Card>
 
+
                     {/* Action Buttons */}
                     <div className="flex gap-3">
                       {selectedEmail?.rejected == false && (
                         <Button
-                          className={`flex-1 cursor-pointer ${
-                            selectedEmail?.accepted
-                              ? "bg-green-600 hover:bg-green-700"
-                              : "bg-emerald-600 hover:bg-emerald-700"
-                          }`}
+                          className={`flex-1 cursor-pointer ${selectedEmail?.accepted
+                            ? "bg-green-600 hover:bg-green-700"
+                            : "bg-emerald-600 hover:bg-emerald-700"
+                            }`}
                           onClick={() => acceptPitch(selectedEmail)}
                           disabled={selectedEmail?.accepted || AccepingMail}
                         >
                           {selectedEmail?.accepted
                             ? "Accepted"
                             : AccepingMail
-                            ? "Accepting..."
-                            : "Accept"}
+                              ? "Accepting..."
+                              : "Accept"}
                         </Button>
                       )}
 
@@ -1050,9 +1065,8 @@ export default function InboxPage() {
                         onClick={() => {
                           setEmailContent({
                             to: selectedEmail.fromEmail,
-                            subject: `Re: ${
-                              selectedEmail.subject || "Your pitch"
-                            }`,
+                            subject: `Re: ${selectedEmail.subject || "Your pitch"
+                              }`,
                             body: `Hi ${selectedEmail?.from},\n\nThank you for reaching out. After reviewing your pitch, we’ve decided not to move forward at this time.\n\nWe appreciate your effort and wish you success ahead.\n\nBest regards,\n[Your Name]`,
                           });
                           setIsEmailModalOpen(true);
@@ -1063,8 +1077,8 @@ export default function InboxPage() {
                         {selectedEmail?.rejected
                           ? "Rejected"
                           : RejectLoading
-                          ? "Rejecting..."
-                          : "Reject"}
+                            ? "Rejecting..."
+                            : "Reject"}
                       </Button>
                     </div>
 
@@ -1102,19 +1116,18 @@ export default function InboxPage() {
                                 className="flex items-start gap-2"
                               >
                                 <div
-                                  className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-                                    point.toLowerCase().includes("advantage") ||
+                                  className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${point.toLowerCase().includes("advantage") ||
                                     point.toLowerCase().includes("strength")
-                                      ? "bg-green-500"
-                                      : point
-                                          .toLowerCase()
-                                          .includes("weakness") ||
-                                        point
-                                          .toLowerCase()
-                                          .includes("challenge")
+                                    ? "bg-green-500"
+                                    : point
+                                      .toLowerCase()
+                                      .includes("weakness") ||
+                                      point
+                                        .toLowerCase()
+                                        .includes("challenge")
                                       ? "bg-red-500"
                                       : "bg-blue-500"
-                                  }`}
+                                    }`}
                                 />
                                 <span className="text-sm text-gray-700">
                                   {point}
@@ -1139,6 +1152,31 @@ export default function InboxPage() {
                         </p>
                       </CardContent>
                     </Card>
+
+                    {selectedEmail?.links?.length ? <Card className="mt-4">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Link2 className="h-5 w-5 text-orange-600" />
+                          Links
+                        </CardTitle>
+                      </CardHeader>
+
+                      <CardContent>
+                        <div className="space-y-1">
+                          {cleanLinks.map((link, i) => (
+                            <a
+                              key={i}
+                              href={link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 text-sm underline break-all block hover:text-blue-800 mb-2"
+                            >
+                              {link}
+                            </a>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card> : ""}
                   </TabsContent>
                 </Tabs>
               </>
@@ -1208,7 +1246,7 @@ export default function InboxPage() {
             </DialogHeader>
 
             {selectedEmail?.attachments &&
-            selectedEmail.attachments.length > 0 ? (
+              selectedEmail.attachments.length > 0 ? (
               <>
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {selectedEmail.attachments.map((attachment, index) => (

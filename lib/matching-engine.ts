@@ -52,11 +52,11 @@ export class MatchingEngine {
 
     const score = Math.round(
       factors.sectorMatch * weights.sectorMatch +
-        factors.stageMatch * weights.stageMatch +
-        factors.checkSizeMatch * weights.checkSizeMatch +
-        factors.geographyMatch * weights.geographyMatch +
-        factors.keywordMatch * weights.keywordMatch +
-        factors.timingMatch * weights.timingMatch,
+      factors.stageMatch * weights.stageMatch +
+      factors.checkSizeMatch * weights.checkSizeMatch +
+      factors.geographyMatch * weights.geographyMatch +
+      factors.keywordMatch * weights.keywordMatch +
+      factors.timingMatch * weights.timingMatch,
     )
 
     const reasoning = this.generateReasoning(factors, startup, investorThesis)
@@ -142,25 +142,25 @@ export class MatchingEngine {
 
     return 30
   }
-
-  private static calculateKeywordMatch(description: string, investorThesis: InvestorThesis): number {
-    const descriptionLower = description.toLowerCase()
-    let score = 50
+  private static calculateKeywordMatch(description: string | undefined, investorThesis: InvestorThesis): number {
+    const descriptionLower = (description || "").toLowerCase(); // Ensure description is a string
+    let score = 50;
 
     // Positive keywords
     const positiveMatches = investorThesis.keywords.filter((keyword) =>
-      descriptionLower.includes(keyword.toLowerCase()),
-    )
-    score += positiveMatches.length * 10
+      descriptionLower.includes(keyword.toLowerCase())
+    );
+    score += positiveMatches.length * 10;
 
     // Negative keywords (exclusions)
     const negativeMatches = investorThesis.excludedKeywords.filter((keyword) =>
-      descriptionLower.includes(keyword.toLowerCase()),
-    )
-    score -= negativeMatches.length * 20
+      descriptionLower.includes(keyword.toLowerCase())
+    );
+    score -= negativeMatches.length * 20;
 
-    return Math.max(0, Math.min(100, score))
+    return Math.max(0, Math.min(100, score));
   }
+
 
   private static calculateTimingMatch(createdAt: Date): number {
     const now = new Date()
