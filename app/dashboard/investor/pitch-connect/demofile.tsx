@@ -1,522 +1,639 @@
 "use client";
-
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Bell, Calendar, FileText } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import React, { useState, useEffect } from "react";
 import { InvestorSidebar } from "@/components/investor-sidebar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import DashboardHeader from "@/components/header";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Download, Mail } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import ConnectionFilterDropdown from "@/components/ui/ConnectionFilterDropdown";
 
-interface DashboardStats {
-  totalPitches: number;
-  newThisWeek: number;
-  underReview: number;
-  contacted: number;
-  deals?: { total?: number; growth?: number };
-}
-
-interface Startup {
-  _id: string;
-  name: string;
-  sector: string;
-  stage: string;
-  location: string;
-  fundingRequirement: { min: number; max: number };
-  relevanceScore: number;
-  status: string;
-  createdAt: string;
-  description: string;
-}
-
-interface Email {
-  id: string;
-  from: string;
-  subject: string;
-  attachments?: any[];
-}
-
-interface SectorResult {
-  emailId: string;
-  sector: string;
-  method: "keywords" | "gemini" | "error";
-}
-
-export default function DashboardPage() {
-  const router = useRouter();
-
-  // ------------------ STATES ------------------
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sectorFilter, setSectorFilter] = useState("all");
-  const [stageFilter, setStageFilter] = useState("all");
-  const [filteredStartups, setFilteredStartups] = useState<Startup[]>([]);
-  const [sectorData, setSectorData] = useState<any[]>([]);
-
-  // ------------------ API FUNCTIONS ------------------
-  const fetchDashboardData = async () => {
-    const [statsRes, startupsRes] = await Promise.all([
-      fetch("/api/investor/stats"),
-      fetch("/api/investor/startups"),
-    ]);
-    const stats = await statsRes.json();
-    const startups = await startupsRes.json();
-    return { stats, startups };
-  };
-
-  const fetchEmails = async () => {
-    const res = await fetch("/api/gmail?limit=40&sort=newest");
-    if (!res.ok) throw new Error("Failed to fetch emails");
-    const data = await res.json();
-    return data.emails || [];
-  };
-
-  const fetchThesis = async () => {
-    const res = await fetch("/api/investor/thesis");
-    if (!res.ok) throw new Error("Failed to fetch thesis");
-    return res.json();
-  };
-
-  // ------------------ QUERIES ------------------
-  const { data: dashboardData, isLoading: isDashboardLoading } = useQuery({
-    queryKey: ["dashboardData"],
-    queryFn: fetchDashboardData,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+export default function Page() {
+  const [startups, setStartups] = useState([]);
+  const [selectedStartup, setSelectedStartup] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailContent, setEmailContent] = useState({
+    to: "",
+    subject: "",
+    body: "",
   });
+  const [Loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("Pitch Connect");
+  const [deals, setDeals] = useState([]);
+  const [investorThesis, setInvestorThesis] = useState(null);
 
-  const { data: emails = [], isLoading: isEmailsLoading } = useQuery({
-    queryKey: ["emails"],
-    queryFn: fetchEmails,
-    staleTime: 5 * 60 * 1000,
-  });
+  const [debugInfo, setDebugInfo] = useState("");
 
-  console.log("emails", emails);
+  useEffect(() => {
+    fetchInvestorThesis();
+    fetchStartups();
+  }, []);
 
-  const predictSectors = async (
-    emails: Email[]
-  ): Promise<{ sectors: SectorResult[]; stats: any }> => {
-    const res = await fetch("/api/predict-sectors", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ emails }),
+  // Fetch investor thesis
+  const fetchInvestorThesis = async () => {
+    try {
+      console.log("🔄 Fetching investor thesis...");
+      setDebugInfo("Fetching investor thesis...");
+
+      const res = await fetch("/api/investor/thesis");
+      console.log("Thesis API response status:", res.status);
+
+      if (res.ok) {
+        const thesis = await res.json();
+        console.log("✅ Thesis fetched successfully:", thesis);
+        setDebugInfo(
+          `Thesis loaded: ${JSON.stringify(thesis).substring(0, 100)}...`
+        );
+        setInvestorThesis(thesis);
+
+        // Fetch startups after thesis is loaded
+        await fetchStartups(thesis);
+      } else {
+        console.error("❌ Failed to fetch thesis, status:", res.status);
+        setDebugInfo("Failed to fetch thesis, using default");
+        // Set a default thesis structure
+        const defaultThesis = {
+          sectors: [],
+          stages: [],
+          checkSizeMin: 0,
+          checkSizeMax: 0,
+          geographies: [],
+          keywords: [],
+          excludedKeywords: [],
+        };
+        setInvestorThesis(defaultThesis);
+        await fetchStartups(defaultThesis);
+      }
+    } catch (err) {
+      console.error("❌ Error fetching investor thesis:", err);
+      setDebugInfo("Error fetching thesis");
+      const defaultThesis = {
+        sectors: [],
+        stages: [],
+        checkSizeMin: 0,
+        checkSizeMax: 0,
+        geographies: [],
+        keywords: [],
+        excludedKeywords: [],
+      };
+      setInvestorThesis(defaultThesis);
+      await fetchStartups(defaultThesis);
+    }
+  };
+
+  // Calculate relevancy score based on investor thesis
+  const calculateRelevancyScore = (startup, thesis) => {
+    console.log(`📊 Calculating score for: ${startup.name}`, {
+      startupSector: startup.sector,
+      startupStage: startup.stage,
+      startupFunding: startup.fundingRequirement,
+      startupLocation: startup.location,
+      thesis,
     });
-    if (!res.ok) throw new Error("Failed to predict sectors");
-    return res.json();
-  };
 
-  const { data: sectorsData, isLoading: sectorsLoading } = useQuery({
-    queryKey: ["sectors"],
-    queryFn: () => predictSectors(emails),
-    enabled: !!emails.length,
-    staleTime: 10 * 60 * 1000, // 10 minutes
-  });
+    // defensive default thesis
+    if (!thesis || Object.keys(thesis).length === 0) {
+      console.log("⚠️ No thesis available, using default score 50");
+      return 50;
+    }
 
-  console.log("sectorsData", sectorsData);
+    let score = 0;
+    let totalWeight = 0;
+    const weights = {
+      sector: 30,
+      stage: 25,
+      funding: 20,
+      geography: 15,
+      keywords: 10,
+    };
 
-  const sectors = sectorsData?.sectors;
+    // normalize numbers for thesis check sizes
+    const thesisMin = Number(thesis.checkSizeMin || 0);
+    const thesisMax =
+      thesis.checkSizeMax === undefined || thesis.checkSizeMax === null
+        ? Infinity
+        : Number(thesis.checkSizeMax);
 
-  // Count sector occurrences
-  const sectorCount = sectors?.reduce((acc, item) => {
-    acc[item?.sector] = (acc[item?.sector] || 0) + 1;
-    return acc;
-  }, {});
-
-  // Convert to Recharts format
-  const FinalSectorData =
-    sectorCount &&
-    Object?.entries(sectorCount).map(([name, value]) => ({
-      name,
-      value,
-    }));
-
-  const { data: thesis, isLoading: isThesisLoading } = useQuery({
-    queryKey: ["thesis"],
-    queryFn: fetchThesis,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const isLoading = isDashboardLoading || isEmailsLoading || isThesisLoading;
-
-  const stats = dashboardData?.stats || {
-    totalPitches: 0,
-    newThisWeek: 0,
-    underReview: 0,
-    contacted: 0,
-    deals: { total: 0, growth: 0 },
-  };
-  const startups = dashboardData?.startups || [];
-
-  // ------------------ EFFECTS ------------------
-  useEffect(() => {
-    if (!Array.isArray(emails) || emails.length === 0) return;
-
-    const aggregated = Object.values(
-      emails.reduce((acc: any, curr: any) => {
-        const sector = curr.sector || "Unknown";
-        if (!acc[sector]) acc[sector] = { name: sector, value: 0 };
-        acc[sector].value += 1;
-        return acc;
-      }, {})
-    );
-    setSectorData(aggregated);
-  }, [emails]);
-
-  // useEffect(() => {
-  //   if (!Array.isArray(startups) || startups.length === 0) return;
-
-  //   const aggregated = Object.values(
-  //     startups.reduce((acc: any, curr: any) => {
-  //       const sector = curr.sector || "Unknown";
-  //       if (!acc[sector]) acc[sector] = { name: sector, value: 0 };
-  //       acc[sector].value += 1;
-  //       return acc;
-  //     }, {})
-  //   );
-
-  //   setSectorData(aggregated);
-  // }, [startups]);
-
-  useEffect(() => {
-    let filtered = startups;
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (startup) =>
-          startup.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          startup.description.toLowerCase().includes(searchTerm.toLowerCase())
+    // Sector matching
+    if (thesis.sectors && thesis.sectors.length > 0 && startup.sector) {
+      const startupSector = startup.sector.toLowerCase().trim();
+      const matchedSector = thesis.sectors.some(
+        (sector) => sector.toLowerCase().trim() === startupSector
       );
+      if (matchedSector) score += weights.sector;
+      totalWeight += weights.sector;
     }
-    if (sectorFilter !== "all") {
-      filtered = filtered.filter((startup) => startup.sector === sectorFilter);
-    }
-    if (stageFilter !== "all") {
-      filtered = filtered.filter((startup) => startup.stage === stageFilter);
-    }
-    setFilteredStartups(filtered);
-  }, [startups, searchTerm, sectorFilter, stageFilter]);
 
-  // ------------------ HELPERS ------------------
-  const getInitials = (name: string) => {
-    if (!name) return "NA";
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
+    // Stage matching
+    if (thesis.stages && thesis.stages.length > 0 && startup.stage) {
+      const startupStage = startup.stage.toLowerCase().trim();
+      const matchedStage = thesis.stages.some(
+        (stage) => stage.toLowerCase().trim() === startupStage
+      );
+      if (matchedStage) score += weights.stage;
+      totalWeight += weights.stage;
+    }
+
+    // Funding range matching (handle number or object)
+    if (
+      (thesisMin !== undefined || thesisMax !== undefined) &&
+      startup.fundingRequirement
+    ) {
+      // startup.fundingRequirement might be a number, or {min,max}
+      let startupMin = 0;
+      let startupMax = Infinity;
+      if (typeof startup.fundingRequirement === "number") {
+        startupMin = startup.fundingRequirement;
+        startupMax = startup.fundingRequirement;
+      } else {
+        startupMin = Number(startup.fundingRequirement?.min || 0);
+        startupMax =
+          startup.fundingRequirement?.max === undefined
+            ? Infinity
+            : Number(startup.fundingRequirement?.max);
+      }
+
+      const fundingOverlap = startupMin <= thesisMax && startupMax >= thesisMin;
+      if (fundingOverlap) score += weights.funding;
+      totalWeight += weights.funding;
+    }
+
+    // Geography matching
+    if (
+      thesis.geographies &&
+      thesis.geographies.length > 0 &&
+      startup.location
+    ) {
+      const startupLocation = startup.location.toLowerCase();
+      const matchedGeo = thesis.geographies.some((geo) =>
+        startupLocation.includes(geo.toLowerCase())
+      );
+      if (matchedGeo) score += weights.geography;
+      totalWeight += weights.geography;
+    }
+
+    // Keyword matching
+    if (thesis.keywords && thesis.keywords.length > 0 && startup.description) {
+      const description = startup.description.toLowerCase();
+      const matchedKeywords = thesis.keywords.filter((keyword) =>
+        description.includes(keyword.toLowerCase())
+      );
+      const keywordScore =
+        (matchedKeywords.length / thesis.keywords.length) * weights.keywords;
+      if (matchedKeywords.length > 0) score += keywordScore;
+      totalWeight += weights.keywords;
+    }
+
+    // Excluded keywords penalty
+    let excludedPenalty = false;
+    if (
+      thesis.excludedKeywords &&
+      thesis.excludedKeywords.length > 0 &&
+      startup.description
+    ) {
+      const description = startup.description.toLowerCase();
+      const excludedMatches = thesis.excludedKeywords.filter((keyword) =>
+        description.includes(keyword.toLowerCase())
+      );
+      if (excludedMatches.length > 0) {
+        score *= 0.7; // 30% penalty
+        excludedPenalty = true;
+      }
+    }
+
+    const finalScore =
+      totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 50;
+    return Math.min(100, Math.max(0, finalScore));
   };
 
-  // const fetchMarketNews = async () => {
-  //   const res = await fetch("/api/market-data/refresh");
-  //   const result = await res.json();
-  //   return result.data?.categorizedNews || [];
-  // };
+  const fetchStartups = async (thesisParam = null) => {
+    try {
+      const res = await fetch("/api/investor/startups", { cache: "no-store" });
+      const data = await res.json();
 
-  // const { data: news = [], isLoading: newsLoading } = useQuery({
-  //   queryKey: ["dashboardNews"],
-  //   queryFn: fetchMarketNews,
-  //   staleTime: 10 * 60 * 1000,
-  // });
+      // choose the thesis passed in (from fetchInvestorThesis) or current state
+      const thesisToUse = thesisParam ||
+        investorThesis || {
+        sectors: [],
+        stages: [],
+        checkSizeMin: 0,
+        checkSizeMax: Infinity,
+        geographies: [],
+        keywords: [],
+        excludedKeywords: [],
+      };
 
-  const pendingEmails = emails.filter((email) => email.status === "Pending");
+      // Calculate relevancy scores for each startup (pass thesis)
+      const startupsWithScores = data.map((startup) => ({
+        ...startup,
+        relevanceScore: calculateRelevancyScore(startup, thesisToUse),
+      }));
 
-  // ------------------ LOADING STATE ------------------
-  if (isLoading) {
-    return (
-      <div className="flex h-screen">
-        <InvestorSidebar />
-        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
-            <p className="text-muted-foreground text-lg">
-              Loading your dashboard...
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+      setStartups(startupsWithScores);
+    } catch (err) {
+      console.error("Error fetching startups:", err);
+    }
+  };
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  };
 
-  // ------------------ PIE COLORS ------------------
-  const COLORS = ["#10B981", "#3B82F6", "#EAB308", "#EF4444"];
+  useEffect(() => {
+    if (activeTab === "Deals") {
+      fetchDeals();
+    }
+  }, [activeTab]);
 
-  // ------------------ RENDER ------------------
+  const fetchDeals = async () => {
+    try {
+      const res = await fetch("/api/deals"); // your Pitch Accept API endpoint
+      const data = await res.json();
+      if (res.ok) {
+        setDeals(data.data); // assuming your API returns { data: [...] }
+      } else {
+        console.error("Failed to fetch deals:", data.error);
+      }
+    } catch (err) {
+      console.error("Error fetching deals:", err);
+    }
+  };
+
+  const sendEmail = async () => {
+    try {
+      setLoading(true);
+
+      // 1️⃣ Send the actual email
+      const res = await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...emailContent,
+          startupId: selectedStartup?._id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert("Error sending email: " + data.message);
+        setLoading(false);
+        return;
+      }
+
+      await fetch(`/api/investor/startups/${selectedStartup?._id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "contacted" }),
+      });
+
+      // 3️⃣ Update UI locally
+      setStartups((prev) =>
+        prev.map((s) =>
+          s._id === selectedStartup?._id ? { ...s, status: "contacted" } : s
+        )
+      );
+
+      // 4️⃣ Reset states
+      setLoading(false);
+      setIsEmailModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      alert("Error sending email");
+      setLoading(false);
+    }
+  };
+
+  //  Filter startups based on active tab
+  const filteredStartups = startups.filter((s) => {
+    if (activeTab === "Pitch Connect") return true; // show ALL
+    if (activeTab === "Deals") return false; // handled by another API later
+    if (activeTab === "Archived") return s.status === "rejected";
+    return true;
+  });
+
   return (
-    <>
-      {thesis &&
-        (!thesis.sectors?.length ||
-          !thesis.stages?.length ||
-          !thesis.geographies?.length ||
-          !thesis.keywords?.length) && (
-          <div className="mb-0 p-4 border border-amber-300 bg-amber-50 text-amber-800 flex justify-between items-center">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+      <InvestorSidebar />
+
+      <div className="flex-1 overflow-auto">
+        {/* Header */}
+        <header className="sticky top-0 z-10 border-b bg-white">
+          <div className="flex h-16 items-center justify-between px-8">
             <div>
-              <p className="font-semibold">
-                Your Investment Thesis is incomplete
-              </p>
-              <p className="text-sm text-amber-700">
-                Please complete your thesis to get better deal recommendations.
+              <h1 className="text-2xl font-bold">Pitch Connect</h1>
+              <p className="text-sm text-gray-600">
+                An overview of your pitches.
               </p>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => router.push("/dashboard/investor/settings")}
-              className="bg-white border-amber-300 text-amber-700 hover:bg-accent hover:text-white hover:border-accent cursor-pointer"
-            >
-              Complete Thesis
-            </Button>
           </div>
-        )}
+        </header>
 
-      <div className="flex h-screen bg-gray-50">
-        <InvestorSidebar />
-        <div className="flex-1 overflow-auto">
-          {/* Header */}
-          <DashboardHeader pendingEmails={pendingEmails} title={"Dashboard"} />
+        <div className="p-8 max-w-7xl mx-auto">
+          {/* <div className="flex items-center justify-end">
+            <ConnectionFilterDropdown
+              onChange={(value) => {
+                console.log("Selected connection type:", value);
+              }}
+            />
+          </div> */}
 
-          {/* Main Content */}
-          <main className="p-8">
-            <div className="grid gap-6 lg:grid-cols-12">
-              {/* Summary */}
-              <Card className="lg:col-span-5">
-                <CardHeader>
-                  <CardTitle>Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div>
-                    <p className="text-sm text-gray-500">Total Pitches</p>
-                    <p className="text-4xl font-bold">{emails?.length}</p>
-                  </div>
+          <div className="py-8">
+            {activeTab === "Pitch Connect" && filteredStartups.length > 0 ? (
+              <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm bg-white">
+                <table className="w-full border-collapse">
+                  <thead className="bg-emerald-50/60 text-gray-600 text-sm">
+                    <tr>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Company
+                      </th>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Stage
+                      </th>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Connection Type
+                      </th>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Relevancy Score
+                      </th>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left font-semibold">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
 
-                  <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="text-sm text-gray-500">Quality Deal Flow</p>
-                      <Badge
-                        variant="secondary"
-                        className={`${
-                          stats.deals?.growth >= 0
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-red-50 text-red-700"
-                        }`}
-                      >
-                        {stats.deals?.growth >= 0 ? "+" : ""}
-                        {stats.deals?.growth ?? 0}%{" "}
-                        {stats.deals?.growth >= 0 ? "↑" : "↓"}
-                      </Badge>
-                    </div>
+                  <tbody className="divide-y divide-gray-100 text-gray-700">
+                    {filteredStartups.map((startup) => {
+                      console.log(startup);
 
-                    <p className="text-4xl font-bold">
-                      {stats.deals?.total ?? 0}
-                    </p>
-
-                    <div className="mt-4 h-16">
-                      <svg viewBox="0 0 200 50" className="w-full">
-                        <path
-                          d="M 0,25 Q 50,15 100,20 T 200,25"
-                          fill="none"
-                          stroke={`${
-                            stats.deals?.growth >= 0
-                              ? "rgb(16 185 129)"
-                              : "rgb(239 68 68)"
-                          }`}
-                          strokeWidth="2"
-                        />
-                      </svg>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-gray-500">Reviewed</p>
-                    <p className="text-4xl font-bold">{stats.underReview}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-gray-500">Contacted</p>
-                    <p className="text-4xl font-bold">{stats.contacted}</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Deal Flow by Sector */}
-              <Card className="lg:col-span-7 w-full">
-                <CardHeader>
-                  <CardTitle>Deal Flow by Sector</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-100">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={FinalSectorData}
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={110}
-                          dataKey="value"
-                          nameKey="name"
-                          label={({ name, percent }) =>
-                            `${name} ${(percent * 100).toFixed(0)}%`
-                          }
+                      return (
+                        <tr
+                          key={startup._id}
+                          className="transition hover:bg-emerald-50/40"
                         >
-                          {FinalSectorData?.map((entry, index) => (
-                            <Cell
-                              key={index}
-                              fill={COLORS[index % COLORS.length]}
-                            />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Latest Market News Widget */}
-              {/* <div className="my-10">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-gray-900">
-                      Market News
-                    </h2>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push("/market-research")}
-                      className="gap-2"
-                    >
-                      View All
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  {newsLoading ? (
-                    <p className="text-gray-500">Loading market news...</p>
-                  ) : news.length === 0 ? (
-                    <p className="text-gray-500">No market news available.</p>
-                  ) : (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {news.slice(0, 6).map((article, idx) => (
-                        <Card
-                          key={idx}
-                          className="hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={() => {
-                            if (article.url) window.open(article.url, "_blank");
-                          }}
-                        >
-                          <CardContent className="p-4 space-y-2">
-                            <Badge className="bg-blue-100 text-blue-700">
-                              {article.source?.name || "News"}
-                            </Badge>
-
-                            <p className="font-semibold text-gray-900 line-clamp-2">
-                              {article.title}
-                            </p>
-
-                            <p className="text-sm text-gray-600 line-clamp-3">
-                              {article.description}
-                            </p>
-
-                            <p className="text-xs text-gray-400 mt-1">
-                              {new Date(article.publishedAt).toLocaleDateString(
-                                "en-US",
-                                {
-                                  month: "short",
-                                  day: "numeric",
-                                }
-                              )}
-                            </p>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                </div> */}
-            </div>
-
-            {/* What's New Today */}
-            <div className="my-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900">
-                  What's New Today
-                </h2>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => router.push("/dashboard/investor/inbox")}
-                  className="gap-2"
-                >
-                  View All
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </div>
-              {emails.length > 0 ? (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  {emails.slice(0, 4).map((email) => (
-                    <Card
-                      key={email.id}
-                      className="hover:shadow-md transition-shadow cursor-pointer"
-                    >
-                      <CardContent className="flex items-center gap-4 p-4">
-                        <Avatar className="h-12 w-12">
-                          <AvatarFallback className="bg-blue-100 text-blue-600">
-                            {getInitials(email.from)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-gray-900 truncate text-sm">
-                            {email.subject}
-                          </p>
-                          <p className="text-sm text-gray-500 truncate">
-                            {email.from}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
+                          <td className="text-sm px-6 py-4 font-medium">
+                            <p>{startup.name}</p>
                             <Badge
-                              className={`${
-                                email?.status == "Contacted"
-                                  ? "bg-blue-100 text-blue-700"
-                                  : email?.status == "Under Evaluation"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : email?.status == "Pending"
-                                  ? "bg-[#F7CB73] text-red-700"
-                                  : email?.status == "New"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : email?.status == "Rejected"
-                                  ? "bg-[#D9512C] text-white"
-                                  : ""
-                              }`}
+                              variant="secondary"
+                              className="mt-1 bg-primary/10 text-primary border-primary/20 font-medium"
                             >
-                              {email.status}
+                              {startup.sector}
                             </Badge>
-                            {email.attachments?.length > 0 && (
-                              <div className="flex items-center gap-1">
-                                <FileText className="h-3 w-3 text-gray-400" />
-                                <span className="text-xs text-gray-500">
-                                  {email.attachments.length}
-                                </span>
-                              </div>
+                          </td>
+                          <td className="text-sm px-6 py-4">
+                            {startup.stage || "—"}
+                          </td>
+                          <td className="text-sm px-6 py-4 font-medium">
+                            Email
+                          </td>
+                          <td className="text-sm px-6 py-4 text-sm">
+                            <div className="flex items-center gap-3">
+                              <Progress
+                                value={startup?.relevanceScore || 80}
+                                className="h-2 w-24"
+                              />
+                              <span className="text-sm font-medium">
+                                {startup?.relevanceScore || 80}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            {startup.status === "submitted" && (
+                              <Badge className="bg-blue-100 text-blue-700">
+                                Submitted
+                              </Badge>
                             )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                            {startup.status === "contacted" && (
+                              <Badge className="bg-emerald-100 text-emerald-700">
+                                Contacted
+                              </Badge>
+                            )}
+                            {startup.status === "under_review" && (
+                              <Badge className="bg-yellow-100 text-yellow-700">
+                                Under Review
+                              </Badge>
+                            )}
+                            {startup.status === "rejected" && (
+                              <Badge className="bg-red-100 text-red-700">
+                                Rejected
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <Button
+                              variant="default"
+                              className="w-25 mr-2 text-xs bg-white hover:bg-emerald-600 text-dark hover:text-white border border-[#ccc] font-medium"
+                              onClick={() => {
+                                setEmailContent({
+                                  to: startup.founderId,
+                                  subject: `Regarding Investment Opportunity in ${startup.name}`,
+                                  body: `Hi ${startup.name} Founder,\n\nI came across your startup and I'm interested in discussing potential investment opportunities.\n\nBest regards,\n[Your Name]`,
+                                });
+                                setIsEmailModalOpen(true);
+                                setSelectedStartup(startup);
+                              }}
+                              disabled={startup.status === "contacted"}
+                            >
+                              {startup.status === "contacted"
+                                ? "Mail Sent"
+                                : "Mail Founder"}
+                            </Button>
+
+                            <Button
+                              variant="default"
+                              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                              onClick={() => {
+                                setSelectedStartup(startup);
+                                setIsModalOpen(true);
+                              }}
+                            >
+                              View Details
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-16 text-center text-gray-500 font-medium">
+                <div className="flex-1 flex h-[60vh] items-center justify-center">
+                  <div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-6"></div>
+                    <p className="text-xl">Loading Pitches...</p>
+                  </div>
                 </div>
-              ) : (
-                <p className="text-gray-500">No new emails today.</p>
-              )}
-            </div>
-          </main>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </>
+
+      {/* === MODALS remain unchanged === */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-6xl w-full max-h-[90vh] overflow-y-auto p-8 bg-white rounded shadow-2xl">
+          {selectedStartup && (
+            <>
+              <DialogHeader className="border-b pb-4 gap-0">
+                <DialogTitle className="text-xl font-bold text-gray-900">
+                  {selectedStartup.name}
+                </DialogTitle>
+                <DialogDescription className="text-sm text-gray-600">
+                  {selectedStartup.sector} • {selectedStartup.stage}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid grid-cols-1 gap-8 mt-6 text-gray-700">
+                <div className="space-y-4">
+                  <p>
+                    <span className="font-semibold">Location:</span>{" "}
+                    {selectedStartup.location || "—"}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Team Size:</span>{" "}
+                    {selectedStartup.teamSize || "—"}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Funding Requirement:</span>{" "}
+                    ₹{selectedStartup.fundingRequirement?.min?.toLocaleString()}{" "}
+                    – ₹
+                    {selectedStartup.fundingRequirement?.max?.toLocaleString()}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Founder Email:</span>{" "}
+                    {selectedStartup.founderId}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Relevance Score:</span>{" "}
+                    {selectedStartup.relevanceScore}%
+                  </p>
+                  <p>
+                    <span className="font-semibold">Status:</span>{" "}
+                    <Badge className="ml-1 bg-blue-100 text-blue-700 capitalize">
+                      {selectedStartup.status}
+                    </Badge>
+                  </p>
+                </div>
+
+                <div>
+                  <p className="font-semibold mb-1 text-lg">Description:</p>
+                  <p className="text-gray-600 leading-relaxed text-sm">
+                    {selectedStartup.description}
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-6 mt-6 text-sm text-gray-500 border-t">
+                <p>
+                  Created:{" "}
+                  {new Date(selectedStartup.createdAt).toLocaleString("en-IN")}
+                </p>
+                <p>
+                  Updated:{" "}
+                  {new Date(selectedStartup.updatedAt).toLocaleString("en-IN")}
+                </p>
+              </div>
+
+              <div className="sticky -bottom-8 left-0 right-0 bg-white border-t mt-8 py-4 flex justify-start gap-4">
+                {selectedStartup.founderId && (
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      (window.location.href = `mailto:${selectedStartup.founderId}`)
+                    }
+                  >
+                    <Mail /> Mail Founder
+                  </Button>
+                )}
+
+                {selectedStartup.pitchDeck && (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      window.open(selectedStartup.pitchDeck, "_blank")
+                    }
+                  >
+                    <Download /> Download Pitch Deck
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEmailModalOpen} onOpenChange={setIsEmailModalOpen}>
+        <DialogContent className="max-w-lg w-full p-6 bg-white rounded shadow-xl">
+          <DialogHeader>
+            <DialogTitle>Send Email</DialogTitle>
+            <DialogDescription>
+              Preview your email before sending.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 mt-4">
+            <div>
+              <label className="font-medium text-sm">To:</label>
+              <input
+                type="email"
+                value={emailContent.to}
+                readOnly
+                className="w-full border px-2 py-1 rounded"
+              />
+            </div>
+
+            <div>
+              <label className="font-medium text-sm">Subject:</label>
+              <input
+                type="text"
+                value={emailContent.subject}
+                onChange={(e) =>
+                  setEmailContent({ ...emailContent, subject: e.target.value })
+                }
+                className="w-full border px-2 py-1 rounded"
+              />
+            </div>
+
+            <div>
+              <label className="font-medium text-sm">Body:</label>
+              <textarea
+                rows={6}
+                value={emailContent.body}
+                onChange={(e) =>
+                  setEmailContent({ ...emailContent, body: e.target.value })
+                }
+                className="w-full border px-2 py-1 rounded"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => setIsEmailModalOpen(false)}
+                disabled={Loading}
+              >
+                Cancel
+              </Button>
+              <Button onClick={sendEmail}>
+                {Loading ? "Sending Email..." : "Send Email"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

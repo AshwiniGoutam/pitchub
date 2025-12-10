@@ -22,6 +22,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "app/api/gmail/route.js", "app/api/investor/my-leads/route.js, "app/dashboard/investor/pitch-connect/page.jsx"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "app/api/gmail/route.js"],
   "exclude": ["node_modules"]
 }
