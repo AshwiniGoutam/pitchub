@@ -36,6 +36,7 @@ import Loading from "./loading";
 import { useUser } from "@/context/UserContext";
 import DashboardHeader from "@/components/header";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 
 interface Email {
   id: string;
@@ -165,6 +166,15 @@ export default function InboxPage() {
     queryFn: fetchInvestorThesis,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  function Portal({ children }: { children: React.ReactNode }) {
+    if (typeof window === "undefined") return null;
+    const mount = document.body;
+    return createPortal(children, mount);
+  }
+
+  const [hoverEmailId, setHoverEmailId] = useState<string | null>(null);
+  const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
 
   // React Query for emails
   const {
@@ -549,12 +559,13 @@ export default function InboxPage() {
     return (
       <div
         key={index}
-        className={`flex items-center justify-between p-3 border rounded-lg transition-all duration-200 ${isDownloading
-          ? "bg-blue-50 border-blue-200"
-          : isDownloaded
+        className={`flex items-center justify-between p-3 border rounded-lg transition-all duration-200 ${
+          isDownloading
+            ? "bg-blue-50 border-blue-200"
+            : isDownloaded
             ? "bg-green-50 border-green-200"
             : "hover:bg-gray-50 cursor-pointer"
-          }`}
+        }`}
         onClick={() =>
           !isDownloading &&
           downloadAttachment(attachment, selectedEmail?.subject || "")
@@ -638,7 +649,6 @@ export default function InboxPage() {
   }
 
   const cleanLinks = normalizeAndUniqueLinks(selectedEmail?.links);
-
 
   if (emailsLoading) {
     return (
@@ -807,8 +817,9 @@ export default function InboxPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Inbox List - Fixed width that doesn't shrink */}
         <div
-          className={`${selectedEmail ? "w-2/3" : "w-full"
-            } overflow-auto border-r bg-white transition-all`}
+          className={`${
+            selectedEmail ? "w-2/3" : "w-full"
+          } overflow-auto border-r bg-white transition-all`}
         >
           {/* Header */}
           {/* <header className="sticky top-0 z-10 border-b bg-white">
@@ -859,12 +870,75 @@ export default function InboxPage() {
                         key={email.id}
                         onClick={() => handleEmailSelect(email)}
                         onDoubleClick={() => handleEmailDoubleClick(email)}
-                        className={`cursor-pointer transition-colors hover:bg-gray-50 ${selectedEmail?.id === email.id ? "bg-emerald-50" : ""
-                          }`}
+                        className={`cursor-pointer transition-colors hover:bg-gray-50 ${
+                          selectedEmail?.id === email.id ? "bg-emerald-50" : ""
+                        }`}
                       >
-                        <td className="px-4 py-4 text-sm font-medium text-gray-900 whitespace-nowrap truncate max-w-[200px]">
+                        <td className="relative px-4 py-4 text-sm font-medium text-gray-900 whitespace-nowrap truncate max-w-[200px]">
                           {email.from}
+                          {email?.replies?.length > 0 && (
+                            <span
+                              className="bg-yellow-100 text-yellow-700 text-xs px-2 py-1 rounded-full cursor-pointer ml-2"
+                              onMouseEnter={(e) => {
+                                const rect = (
+                                  e.target as HTMLElement
+                                ).getBoundingClientRect();
+                                setPopupPos({
+                                  top: rect.bottom + 8,
+                                  left: rect.left,
+                                });
+                                setHoverEmailId(email.id);
+                              }}
+                              onMouseLeave={() => setHoverEmailId(null)}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {email.replies.length}
+                            </span>
+                          )}
+
+                          {hoverEmailId === email.id && (
+                            <Portal>
+                              <div
+                                className="fixed z-[999999] w-80 bg-white border border-gray-300 shadow-xl rounded-lg p-3"
+                                style={{
+                                  top: popupPos.top,
+                                  left: popupPos.left,
+                                }}
+                                onMouseEnter={() => setHoverEmailId(email.id)}
+                                onMouseLeave={() => setHoverEmailId(null)}
+                              >
+                                <div className="text-sm font-semibold text-gray-700 mb-2">
+                                  Conversation Thread
+                                </div>
+
+                                <div className="max-h-64 overflow-y-auto space-y-3">
+                                  {email.replies.map((reply, index) => (
+                                    <div key={index} className="border-b pb-2">
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-xs font-medium text-gray-600">
+                                          {reply.from}
+                                        </span>
+                                        <span className="text-[10px] text-gray-400">
+                                          {new Date(
+                                            reply.date
+                                          ).toLocaleDateString()}
+                                        </span>
+                                      </div>
+
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        <span className="font-semibold">
+                                          Subject:
+                                        </span>{" "}
+                                        {reply.subject}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </Portal>
+                          )}
                         </td>
+
                         <td className="px-4 py-4 text-sm text-gray-500 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4 text-gray-400" />
@@ -891,18 +965,19 @@ export default function InboxPage() {
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap">
                           <Badge
-                            className={`${email?.status == "Contacted"
-                              ? "bg-blue-100 text-blue-700"
-                              : email?.status == "Under Evaluation"
+                            className={`${
+                              email?.status == "Contacted"
+                                ? "bg-blue-100 text-blue-700"
+                                : email?.status == "Under Evaluation"
                                 ? "bg-yellow-100 text-yellow-700"
                                 : email?.status == "Pending"
-                                  ? "bg-[#F7CB73] text-red-700"
-                                  : email?.status == "New"
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : email?.status == "Rejected"
-                                      ? "bg-[#D9512C] text-white"
-                                      : ""
-                              }`}
+                                ? "bg-[#F7CB73] text-red-700"
+                                : email?.status == "New"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : email?.status == "Rejected"
+                                ? "bg-[#D9512C] text-white"
+                                : ""
+                            }`}
                           >
                             {email.status}
                           </Badge>
@@ -1035,23 +1110,23 @@ export default function InboxPage() {
                       </CardContent>
                     </Card>
 
-
                     {/* Action Buttons */}
                     <div className="flex gap-3">
                       {selectedEmail?.rejected == false && (
                         <Button
-                          className={`flex-1 cursor-pointer ${selectedEmail?.accepted
-                            ? "bg-green-600 hover:bg-green-700"
-                            : "bg-emerald-600 hover:bg-emerald-700"
-                            }`}
+                          className={`flex-1 cursor-pointer ${
+                            selectedEmail?.accepted
+                              ? "bg-green-600 hover:bg-green-700"
+                              : "bg-emerald-600 hover:bg-emerald-700"
+                          }`}
                           onClick={() => acceptPitch(selectedEmail)}
                           disabled={selectedEmail?.accepted || AccepingMail}
                         >
                           {selectedEmail?.accepted
                             ? "Accepted"
                             : AccepingMail
-                              ? "Accepting..."
-                              : "Accept"}
+                            ? "Accepting..."
+                            : "Accept"}
                         </Button>
                       )}
 
@@ -1065,8 +1140,9 @@ export default function InboxPage() {
                         onClick={() => {
                           setEmailContent({
                             to: selectedEmail.fromEmail,
-                            subject: `Re: ${selectedEmail.subject || "Your pitch"
-                              }`,
+                            subject: `Re: ${
+                              selectedEmail.subject || "Your pitch"
+                            }`,
                             body: `Hi ${selectedEmail?.from},\n\nThank you for reaching out. After reviewing your pitch, we’ve decided not to move forward at this time.\n\nWe appreciate your effort and wish you success ahead.\n\nBest regards,\n[Your Name]`,
                           });
                           setIsEmailModalOpen(true);
@@ -1077,8 +1153,8 @@ export default function InboxPage() {
                         {selectedEmail?.rejected
                           ? "Rejected"
                           : RejectLoading
-                            ? "Rejecting..."
-                            : "Reject"}
+                          ? "Rejecting..."
+                          : "Reject"}
                       </Button>
                     </div>
 
@@ -1116,18 +1192,19 @@ export default function InboxPage() {
                                 className="flex items-start gap-2"
                               >
                                 <div
-                                  className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${point.toLowerCase().includes("advantage") ||
+                                  className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                                    point.toLowerCase().includes("advantage") ||
                                     point.toLowerCase().includes("strength")
-                                    ? "bg-green-500"
-                                    : point
-                                      .toLowerCase()
-                                      .includes("weakness") ||
-                                      point
-                                        .toLowerCase()
-                                        .includes("challenge")
+                                      ? "bg-green-500"
+                                      : point
+                                          .toLowerCase()
+                                          .includes("weakness") ||
+                                        point
+                                          .toLowerCase()
+                                          .includes("challenge")
                                       ? "bg-red-500"
                                       : "bg-blue-500"
-                                    }`}
+                                  }`}
                                 />
                                 <span className="text-sm text-gray-700">
                                   {point}
@@ -1153,30 +1230,34 @@ export default function InboxPage() {
                       </CardContent>
                     </Card>
 
-                    {selectedEmail?.links?.length ? <Card className="mt-4">
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                          <Link2 className="h-5 w-5 text-orange-600" />
-                          Links
-                        </CardTitle>
-                      </CardHeader>
+                    {selectedEmail?.links?.length ? (
+                      <Card className="mt-4">
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-lg">
+                            <Link2 className="h-5 w-5 text-orange-600" />
+                            Links
+                          </CardTitle>
+                        </CardHeader>
 
-                      <CardContent>
-                        <div className="space-y-1">
-                          {cleanLinks.map((link, i) => (
-                            <a
-                              key={i}
-                              href={link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 text-sm underline break-all block hover:text-blue-800 mb-2"
-                            >
-                              {link}
-                            </a>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card> : ""}
+                        <CardContent>
+                          <div className="space-y-1">
+                            {cleanLinks.map((link, i) => (
+                              <a
+                                key={i}
+                                href={link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 text-sm underline break-all block hover:text-blue-800 mb-2"
+                              >
+                                {link}
+                              </a>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      ""
+                    )}
                   </TabsContent>
                 </Tabs>
               </>
@@ -1246,7 +1327,7 @@ export default function InboxPage() {
             </DialogHeader>
 
             {selectedEmail?.attachments &&
-              selectedEmail.attachments.length > 0 ? (
+            selectedEmail.attachments.length > 0 ? (
               <>
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {selectedEmail.attachments.map((attachment, index) => (
