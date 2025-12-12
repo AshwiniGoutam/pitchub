@@ -215,19 +215,20 @@ export default function DashboardPage() {
       .slice(0, 2);
   };
 
-  // const fetchMarketNews = async () => {
-  //   const res = await fetch("/api/market-data/refresh");
-  //   const result = await res.json();
-  //   return result.data?.categorizedNews || [];
-  // };
+  const fetchMarketNews = async () => {
+    const res = await fetch("/api/market-data/refresh");
+    const result = await res.json();
+    return result.data?.categorizedNews || [];
+  };
 
-  // const { data: news = [], isLoading: newsLoading } = useQuery({
-  //   queryKey: ["dashboardNews"],
-  //   queryFn: fetchMarketNews,
-  //   staleTime: 10 * 60 * 1000,
-  // });
+  const { data: news = [], isLoading: newsLoading } = useQuery({
+    queryKey: ["dashboardNews"],
+    queryFn: fetchMarketNews,
+    staleTime: 10 * 60 * 1000,
+  });
 
   const pendingEmails = emails.filter((email) => email.status === "Pending");
+  const reviewedEmails = emails.filter((email) => email.status === "Under Evaluation");
 
   // ------------------ LOADING STATE ------------------
   if (isLoading) {
@@ -247,7 +248,18 @@ export default function DashboardPage() {
   }
 
   // ------------------ PIE COLORS ------------------
-  const COLORS = ["#10B981", "#3B82F6", "#EAB308", "#EF4444"];
+  const COLORS = [
+    "#10B981", // FinTech - green
+    "#3B82F6", // Healthcare - blue
+    "#EAB308", // Marketplace - yellow
+    "#EF4444", // EdTech - red
+    "#34D399", // AI/ML - lighter green
+    "#60A5FA", // E-commerce - lighter blue
+    "#FCD34D", // CleanTech - lighter yellow
+    "#F87171", // Mobility - lighter red
+    "#059669"  // Real Estate - dark green
+  ];
+
 
   // ------------------ RENDER ------------------
   return (
@@ -286,26 +298,25 @@ export default function DashboardPage() {
           <main className="p-8">
             <div className="grid gap-6 lg:grid-cols-12">
               {/* Summary */}
-              <Card className="lg:col-span-5">
+              <Card className="lg:col-span-12">
                 <CardHeader>
                   <CardTitle>Summary</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-500">Total Pitches</p>
                     <p className="text-4xl font-bold">{emails?.length}</p>
                   </div>
 
                   <div>
-                    <div className="mb-2 flex items-center justify-between">
+                    <div className="flex items-center justify-between">
                       <p className="text-sm text-gray-500">Quality Deal Flow</p>
                       <Badge
                         variant="secondary"
-                        className={`${
-                          stats.deals?.growth >= 0
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-red-50 text-red-700"
-                        }`}
+                        className={`${stats.deals?.growth >= 0
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-red-50 text-red-700"
+                          }`}
                       >
                         {stats.deals?.growth >= 0 ? "+" : ""}
                         {stats.deals?.growth ?? 0}%{" "}
@@ -314,39 +325,38 @@ export default function DashboardPage() {
                     </div>
 
                     <p className="text-4xl font-bold">
-                      {stats.deals?.total ?? 0}
+                      {stats.acceptedPitches ?? 0}
                     </p>
 
-                    <div className="mt-4 h-16">
+                    {/* <div className="mt-4 h-16">
                       <svg viewBox="0 0 200 50" className="w-full">
                         <path
                           d="M 0,25 Q 50,15 100,20 T 200,25"
                           fill="none"
-                          stroke={`${
-                            stats.deals?.growth >= 0
-                              ? "rgb(16 185 129)"
-                              : "rgb(239 68 68)"
-                          }`}
+                          stroke={`${stats.deals?.growth >= 0
+                            ? "rgb(16 185 129)"
+                            : "rgb(239 68 68)"
+                            }`}
                           strokeWidth="2"
                         />
                       </svg>
-                    </div>
+                    </div> */}
                   </div>
 
                   <div>
-                    <p className="text-sm text-gray-500">Reviewed</p>
-                    <p className="text-4xl font-bold">{stats.underReview}</p>
+                    <p className="text-sm text-gray-500">Pending Pitches</p>
+                    <p className="text-4xl font-bold">{pendingEmails?.length}</p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-gray-500">Contacted</p>
-                    <p className="text-4xl font-bold">{stats.contacted}</p>
+                    <p className="text-sm text-gray-500">Under Evaluation</p>
+                    <p className="text-4xl font-bold">{reviewedEmails?.length}</p>
                   </div>
                 </CardContent>
               </Card>
 
               {/* Deal Flow by Sector */}
-              <Card className="lg:col-span-7 w-full">
+              <Card className="lg:col-span-6 w-full">
                 <CardHeader>
                   <CardTitle>Deal Flow by Sector</CardTitle>
                 </CardHeader>
@@ -379,6 +389,54 @@ export default function DashboardPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              <Card className="lg:col-span-6 w-full gap-0">
+                <CardHeader className="flex items-center justify-between px-5">
+                  <CardTitle>Latest News</CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push("/dashboard/investor/market-research")}
+                    className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600 cursor-pointer"
+                  >
+                    View All
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </CardHeader>
+                {news.slice(0, 3).map((article, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      if (article.url) window.open(article.url, "_blank");
+                    }}
+                  >
+                    <CardContent
+                      className={`p-4 py-2 space-y-2 ${idx === news.slice(0, 3).length - 1 ? 'border-0' : 'border-b'
+                        } cursor-pointer hover:bg-gray-50 transition`}
+                    >
+                      <Badge className="bg-green-100 text-green-800">
+                        {article.source?.name || "News"}
+                      </Badge>
+
+                      <p className="font-semibold text-sm text-gray-900 line-clamp-2">
+                        {article.title}
+                      </p>
+
+                      <p className="text-sm text-gray-600 line-clamp-1">
+                        {article.description}
+                      </p>
+
+                      <p className="text-xs text-gray-400 mt-1">
+                        {new Date(article.publishedAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </p>
+                    </CardContent>
+                  </div>
+                ))}
+              </Card>
+
 
               {/* Latest Market News Widget */}
               {/* <div className="my-10">
@@ -480,22 +538,27 @@ export default function DashboardPage() {
                           </p>
                           <div className="flex items-center gap-2 mt-1">
                             <Badge
-                              className={`${
-                                email?.status == "Contacted"
-                                  ? "bg-blue-100 text-blue-700"
-                                  : email?.status == "Under Evaluation"
+                              className={`${email?.status == "Contacted"
+                                ? "bg-blue-100 text-blue-700"
+                                : email?.status == "Under Evaluation"
                                   ? "bg-yellow-100 text-yellow-700"
                                   : email?.status == "Pending"
-                                  ? "bg-[#F7CB73] text-red-700"
-                                  : email?.status == "New"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : email?.status == "Rejected"
-                                  ? "bg-[#D9512C] text-white"
-                                  : ""
-                              }`}
+                                    ? "bg-[#F7CB73] text-red-700"
+                                    : email?.status == "New"
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : email?.status == "Rejected"
+                                        ? "bg-[#D9512C] text-white"
+                                        : ""
+                                }`}
                             >
                               {email.status}
                             </Badge>
+                            {email.replies?.length ? <span
+                              className="bg-yellow-100 text-yellow-700 text-xs px-2 py-1 rounded-full cursor-pointer ml-2"
+
+                            >
+                              {email.replies.length}
+                            </span> : ""}
                             {email.attachments?.length > 0 && (
                               <div className="flex items-center gap-1">
                                 <FileText className="h-3 w-3 text-gray-400" />

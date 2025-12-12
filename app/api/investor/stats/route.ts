@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0); 
+    const accepted_pitches = await db.collection("accepted_pitches").countDocuments({ userEmail });
+
 
     // 📊 Parallel queries (filtered by user)
     const [
@@ -41,16 +43,19 @@ export async function GET(request: NextRequest) {
         .countDocuments({ createdBy: userEmail, status: "under_review" }),
       db.collection("accepted_pitches").countDocuments({
         userEmail,
+        status: { $ne: "rejected" },
         createdAt: { $gte: startOfThisMonth, $lte: now },
       }),
       db.collection("accepted_pitches").countDocuments({
         userEmail,
+        status: { $ne: "rejected" },
         createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth },
       }),
       db.collection("user_startup_status").countDocuments({
         userEmail,
         status: "contacted",
       }),
+      db.collection("accepted_pitches").find({ userEmail }),
     ]);
 
     // 📈 Growth calculation
@@ -69,6 +74,7 @@ export async function GET(request: NextRequest) {
           total: dealsThisMonth,
           growth: parseFloat(dealGrowth.toFixed(2)),
         },
+        acceptedPitches: accepted_pitches,
       },
       {
         headers: {
