@@ -249,15 +249,15 @@ export default function DashboardPage() {
 
   // ------------------ PIE COLORS ------------------
   const COLORS = [
-    "#10B981", // FinTech - green
-    "#3B82F6", // Healthcare - blue
-    "#EAB308", // Marketplace - yellow
-    "#EF4444", // EdTech - red
-    "#34D399", // AI/ML - lighter green
-    "#60A5FA", // E-commerce - lighter blue
-    "#FCD34D", // CleanTech - lighter yellow
-    "#F87171", // Mobility - lighter red
-    "#059669"  // Real Estate - dark green
+    "#10B981",
+    "#3B82F6",
+    "#EAB308",
+    "#EF4444",
+    "#34D399",
+    "#60A5FA",
+    "#FCD34D",
+    "#F87171",
+    "#059669"
   ];
 
 
@@ -298,23 +298,23 @@ export default function DashboardPage() {
           <main className="p-8">
             <div className="grid gap-6 lg:grid-cols-12">
               {/* Summary */}
-              <Card className="lg:col-span-12">
+              <Card className="lg:col-span-12 gap-2">
                 <CardHeader>
                   <CardTitle>Summary</CardTitle>
                 </CardHeader>
-                <CardContent className="flex items-center justify-between">
-                  <div>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-orange-50 text-orange-800 p-4 rounded-lg">
                     <p className="text-sm text-gray-500">Total Pitches</p>
-                    <p className="text-4xl font-bold">{emails?.length}</p>
+                    <p className="text-4xl font-bold mt-4">{emails?.length}</p>
                   </div>
 
-                  <div>
+                  <div className="bg-green-50 text-green-800 p-4 rounded-lg">
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-gray-500">Quality Deal Flow</p>
                       <Badge
                         variant="secondary"
                         className={`${stats.deals?.growth >= 0
-                          ? "bg-emerald-50 text-emerald-700"
+                          ? "bg-green-700 text-green-50"
                           : "bg-red-50 text-red-700"
                           }`}
                       >
@@ -324,7 +324,7 @@ export default function DashboardPage() {
                       </Badge>
                     </div>
 
-                    <p className="text-4xl font-bold">
+                    <p className="text-4xl font-bold mt-4">
                       {stats.acceptedPitches ?? 0}
                     </p>
 
@@ -343,14 +343,14 @@ export default function DashboardPage() {
                     </div> */}
                   </div>
 
-                  <div>
+                  <div className="bg-red-50 text-red-800 p-4 rounded-lg">
                     <p className="text-sm text-gray-500">Pending Pitches</p>
-                    <p className="text-4xl font-bold">{pendingEmails?.length}</p>
+                    <p className="text-4xl font-bold mt-4">{pendingEmails?.length}</p>
                   </div>
 
-                  <div>
+                  <div className="bg-blue-50 text-blue-800 p-4 rounded-lg">
                     <p className="text-sm text-gray-500">Under Evaluation</p>
-                    <p className="text-4xl font-bold">{reviewedEmails?.length}</p>
+                    <p className="text-4xl font-bold mt-4">{reviewedEmails?.length}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -436,68 +436,6 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </Card>
-
-
-              {/* Latest Market News Widget */}
-              {/* <div className="my-10">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-gray-900">
-                      Market News
-                    </h2>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push("/market-research")}
-                      className="gap-2"
-                    >
-                      View All
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  {newsLoading ? (
-                    <p className="text-gray-500">Loading market news...</p>
-                  ) : news.length === 0 ? (
-                    <p className="text-gray-500">No market news available.</p>
-                  ) : (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {news.slice(0, 6).map((article, idx) => (
-                        <Card
-                          key={idx}
-                          className="hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={() => {
-                            if (article.url) window.open(article.url, "_blank");
-                          }}
-                        >
-                          <CardContent className="p-4 space-y-2">
-                            <Badge className="bg-blue-100 text-blue-700">
-                              {article.source?.name || "News"}
-                            </Badge>
-
-                            <p className="font-semibold text-gray-900 line-clamp-2">
-                              {article.title}
-                            </p>
-
-                            <p className="text-sm text-gray-600 line-clamp-3">
-                              {article.description}
-                            </p>
-
-                            <p className="text-xs text-gray-400 mt-1">
-                              {new Date(article.publishedAt).toLocaleDateString(
-                                "en-US",
-                                {
-                                  month: "short",
-                                  day: "numeric",
-                                }
-                              )}
-                            </p>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                </div> */}
             </div>
 
             {/* What's New Today */}
@@ -523,7 +461,7 @@ export default function DashboardPage() {
                       key={email.id}
                       className="hover:shadow-md transition-shadow cursor-pointer"
                     >
-                      <CardContent className="flex items-center gap-4 p-4">
+                      <CardContent className="flex items-center gap-4 py-0 box-shadow-none">
                         <Avatar className="h-12 w-12">
                           <AvatarFallback className="bg-blue-100 text-blue-600">
                             {getInitials(email.from)}
@@ -538,16 +476,16 @@ export default function DashboardPage() {
                           </p>
                           <div className="flex items-center gap-2 mt-1">
                             <Badge
-                              className={`${email?.status == "Contacted"
-                                ? "bg-blue-100 text-blue-700"
-                                : email?.status == "Under Evaluation"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : email?.status == "Pending"
-                                    ? "bg-[#F7CB73] text-red-700"
-                                    : email?.status == "New"
-                                      ? "bg-emerald-100 text-emerald-700"
-                                      : email?.status == "Rejected"
-                                        ? "bg-[#D9512C] text-white"
+                              className={`${email?.status === "Contacted"
+                                ? "bg-blue-200 text-blue-800"
+                                : email?.status === "Under Evaluation"
+                                  ? "bg-green-100 text-green-900"
+                                  : email?.status === "Pending"
+                                    ? "bg-slate-200 text-slate-800"
+                                    : email?.status === "New"
+                                      ? "bg-orange-200 text-orange-800"
+                                      : email?.status === "Rejected"
+                                        ? "bg-red-200 text-red-800"
                                         : ""
                                 }`}
                             >

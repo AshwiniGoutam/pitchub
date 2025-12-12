@@ -963,15 +963,15 @@ export default function InboxPage() {
                         <td className="px-4 py-4 whitespace-nowrap">
                           <Badge
                             className={`${email?.status === "Contacted"
-                                ? "bg-blue-200 text-blue-800"
+                                ? "bg-blue-100 text-blue-800"
                                 : email?.status === "Under Evaluation"
-                                  ? "bg-green-200 text-green-900"
+                                  ? "bg-green-100 text-green-900"
                                   : email?.status === "Pending"
-                                    ? "bg-slate-200 text-slate-800"
+                                    ? "bg-slate-100 text-slate-800"
                                     : email?.status === "New"
-                                      ? "bg-orange-200 text-orange-800"
+                                      ? "bg-orange-100 text-orange-800"
                                       : email?.status === "Rejected"
-                                        ? "bg-red-200 text-red-800"
+                                        ? "bg-red-100 text-red-800"
                                         : ""
                               }`}
                           >
