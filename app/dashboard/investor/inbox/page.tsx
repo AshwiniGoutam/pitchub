@@ -738,6 +738,7 @@ export default function InboxPage() {
             from: email.from,
             fromEmail: email.fromEmail,
             analysis: emailAnalyses[emailId?.id],
+            founderEmail:''
           },
         ],
       };

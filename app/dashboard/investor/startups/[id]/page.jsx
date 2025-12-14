@@ -10,6 +10,17 @@ export default function DealDetail({ params }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef(null);
+  const [founderEmail, setFounderEmail] = useState(null);
+
+  useEffect(() => {
+    fetch(`/api/deals/${params.id}`)
+      .then((res) => res.json())
+      .then((res) => {
+        setFounderEmail(res.data?.founderEmail || null);
+        console.log(res?.data);
+        
+      });
+  }, [params.id]);
 
   // Scroll to bottom when new message arrives
   useEffect(() => {
@@ -24,13 +35,22 @@ export default function DealDetail({ params }) {
 
   const sendMessage = async () => {
     if (!input.trim()) return;
+
     const res = await fetch(`/api/deals/${params.id}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: input }),
+      body: JSON.stringify({
+        message: input,
+        receiverEmail: founderEmail, // ✅ REQUIRED
+      }),
     });
+
     const data = await res.json();
-    if (data.data) setMessages((prev) => [...prev, data.data]);
+
+    if (data.data) {
+      setMessages((prev) => [...prev, data.data]);
+    }
+
     setInput("");
   };
 

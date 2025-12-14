@@ -411,7 +411,7 @@ export default function Page() {
                           key={deal.emailId}
                           className="transition hover:bg-emerald-50/40"
                           onDoubleClick={() =>
-                            router.push(`/dashboard/investor/startups/${deal._id}`)
+                            router.push(`/dashboard/investor/startups/${deal.emailId}`)
                           }
                         >
                           <td className="text-sm px-6 py-4">{deal.from}</td>

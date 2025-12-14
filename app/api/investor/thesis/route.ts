@@ -4,7 +4,6 @@ import { ThesisManager, type InvestorThesis } from "@/lib/matching-engine";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
 
-
 // ✅ Reusable helper (used internally in Gmail API)
 export async function getInvestorThesisByEmail(userEmail: string) {
   const db = await getDatabase();
@@ -25,8 +24,6 @@ export async function getInvestorThesisByEmail(userEmail: string) {
   };
 }
 
-
-
 // GET investor thesis
 export async function GET(request: NextRequest) {
   try {
@@ -37,10 +34,14 @@ export async function GET(request: NextRequest) {
     }
 
     const db = await getDatabase();
-    const investor = await db.collection("users").findOne({ email: session.user.email });
+    const investor = await db
+      .collection("users")
+      .findOne({ email: session.user.email });
 
     if (!investor || !investor.investorProfile) {
-      return NextResponse.json(ThesisManager.getDefaultThesis(), { status: 200 });
+      return NextResponse.json(ThesisManager.getDefaultThesis(), {
+        status: 200,
+      });
     }
 
     const thesis: InvestorThesis = {
@@ -56,7 +57,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(thesis, { status: 200 });
   } catch (error) {
     console.error("Error fetching investor thesis:", error);
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { message: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
@@ -64,56 +68,52 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-
     if (!session?.user?.email) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    let thesis: InvestorThesis;
-    try {
-      thesis = await request.json();
-    } catch {
-      return NextResponse.json({ message: "Invalid JSON body" }, { status: 400 });
-    }
+    const thesis: InvestorThesis = await request.json();
 
-    // Validate incoming thesis
     const validation = ThesisManager.validateThesis(thesis);
     if (!validation.isValid) {
-      return NextResponse.json({ message: "Invalid thesis", errors: validation.errors }, { status: 400 });
+      return NextResponse.json(
+        { message: "Invalid thesis", errors: validation.errors },
+        { status: 400 }
+      );
     }
 
     const db = await getDatabase();
 
-    // Build dynamic $set object to prevent overwriting fields with undefined
-    const updateData: any = { updatedAt: new Date() };
+    const updateData = {
+      investorProfile: {
+        sectors: thesis.sectors || [],
+        stagePreference: thesis.stages || [],
+        checkSize: {
+          min: thesis.checkSizeMin || 0,
+          max: thesis.checkSizeMax || 0,
+        },
+        geographies: thesis.geographies || [],
+        keywords: thesis.keywords || [],
+        excludedKeywords: thesis.excludedKeywords || [],
+      },
+      updatedAt: new Date(),
+    };
 
-    if (thesis.sectors) updateData["investorProfile.sectors"] = thesis.sectors;
-    if (thesis.stages) updateData["investorProfile.stagePreference"] = thesis.stages;
-    if (
-      thesis.checkSizeMin !== undefined &&
-      thesis.checkSizeMax !== undefined
-    ) {
-      updateData["investorProfile.checkSize"] = {
-        min: thesis.checkSizeMin,
-        max: thesis.checkSizeMax,
-      };
-    }
-    if (thesis.geographies) updateData["investorProfile.geographies"] = thesis.geographies;
-    if (thesis.keywords) updateData["investorProfile.keywords"] = thesis.keywords;
-    if (thesis.excludedKeywords) updateData["investorProfile.excludedKeywords"] = thesis.excludedKeywords;
-
-    const result = await db.collection("users").updateOne(
+    await db.collection("users").updateOne(
       { email: session.user.email },
-      { $set: updateData }
+      { $set: updateData },
+      { upsert: true } // ✅ VERY IMPORTANT
     );
 
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ message: "Investor not found" }, { status: 404 });
-    }
-
-    return NextResponse.json({ message: "Investment thesis updated successfully" }, { status: 200 });
+    return NextResponse.json(
+      { message: "Investment thesis updated successfully" },
+      { status: 200 }
+    );
   } catch (error) {
-    console.error("Error updating investor thesis:", error);
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+    console.error("PUT thesis error:", error);
+    return NextResponse.json(
+      { message: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
