@@ -266,9 +266,7 @@ export default function DashboardPage() {
     <>
       {thesis &&
         (!thesis.sectors?.length ||
-          !thesis.stages?.length ||
-          !thesis.geographies?.length ||
-          !thesis.keywords?.length) && (
+          !thesis.stages?.length ) && (
           <div className="mb-0 p-4 border border-amber-300 bg-amber-50 text-amber-800 flex justify-between items-center">
             <div>
               <p className="font-semibold">
