@@ -2,7 +2,6 @@
 
 import { Upload } from "lucide-react";
 import { useState } from "react";
-import { Input } from "@/components/ui/Input";
 
 export default function LeadForm({ params }) {
     const { investorId } = params;
@@ -76,7 +75,7 @@ export default function LeadForm({ params }) {
                 <form className="space-y-5" onSubmit={handleSubmit}>
                     <div>
                         <label className="block mb-1 font-medium text-gray-700">Startup Name</label>
-                        <Input
+                        <input
                             type="text"
                             placeholder="Enter startup name"
                             value={formData.startupName}
@@ -90,7 +89,7 @@ export default function LeadForm({ params }) {
 
                     <div>
                         <label className="block mb-1 font-medium text-gray-700">Founder Name</label>
-                        <Input
+                        <input
                             type="text"
                             placeholder="Enter founder name"
                             value={formData.founderName}
@@ -128,7 +127,7 @@ export default function LeadForm({ params }) {
 
                     {/* <div>
                         <label className="block mb-1 font-medium text-gray-700">Stage</label>
-                        <Input
+                        <input
                             type="text"
                             placeholder="Enter startup stage"
                             value={formData.stage}
@@ -165,7 +164,7 @@ export default function LeadForm({ params }) {
                     <div class="flex flex-col gap-4 sm:flex-col lg:flex-row lg:items-center lg:justify-between">
                         <div>
                             <label className="block mb-1 font-medium text-gray-700">Minimum Funding Amount ($/inr)</label>
-                            <Input
+                            <input
                                 type="number"
                                 placeholder="Enter minimum investment amount"
                                 value={formData.minInvestment}
@@ -179,7 +178,7 @@ export default function LeadForm({ params }) {
 
                         <div>
                             <label className="block mb-1 font-medium text-gray-700">Maximum Funding Amount ($/inr)</label>
-                            <Input
+                            <input
                                 type="number"
                                 placeholder="Enter maximum investment amount"
                                 value={formData.maxInvestment}
@@ -194,7 +193,7 @@ export default function LeadForm({ params }) {
 
                     <div>
                         <label className="block mb-1 font-medium text-gray-700">Email</label>
-                        <Input
+                        <input
                             type="email"
                             placeholder="Enter email"
                             value={formData.email}
@@ -208,7 +207,7 @@ export default function LeadForm({ params }) {
 
                     <div>
                         <label className="block mb-1 font-medium text-gray-700">Location</label>
-                        <Input
+                        <input
                             type="text"
                             placeholder="Enter location"
                             value={formData.location}
@@ -264,7 +263,7 @@ export default function LeadForm({ params }) {
                                     ? pitchDeck.name
                                     : "Click to upload or drag and drop"}
                             </p>
-                            <Input
+                            <input
                                 id="pitchDeck"
                                 type="file"
                                 accept=".pdf,.ppt,.pptx"
