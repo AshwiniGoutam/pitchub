@@ -1,6 +1,8 @@
 "use client";
 
+import { Upload } from "lucide-react";
 import { useState } from "react";
+import { Input } from "@/components/ui/Input";
 
 export default function LeadForm({ params }) {
     const { investorId } = params;
@@ -14,15 +16,37 @@ export default function LeadForm({ params }) {
         email: "",
         location: "",
         description: "",
+        competitorsData: "",
     });
     const [submitted, setSubmitted] = useState(false);
+    const [pitchDeck, setPitchDeck] = useState(null);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        const fd = new FormData(); // renamed to avoid conflict
+
+        // append route param
+        fd.append("investorId", investorId);
+
+        // append all form fields
+        Object.entries(formData).forEach(([key, value]) => {
+            fd.append(key, value);
+        });
+
+        // append file
+        if (pitchDeck) {
+            fd.append("pitchDeck", pitchDeck);
+        }
+
+        // DEBUG (optional)
+        for (let pair of fd.entries()) {
+            console.log(pair[0], pair[1]);
+        }
+
         const res = await fetch("/api/lead", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ investorId, ...formData }),
+            body: fd, // ❗ NO headers
         });
 
         if (res.ok) {
@@ -31,6 +55,7 @@ export default function LeadForm({ params }) {
             alert("Failed to submit");
         }
     };
+
 
     if (submitted)
         return (
@@ -51,7 +76,7 @@ export default function LeadForm({ params }) {
                 <form className="space-y-5" onSubmit={handleSubmit}>
                     <div>
                         <label className="block mb-1 font-medium text-gray-700">Startup Name</label>
-                        <input
+                        <Input
                             type="text"
                             placeholder="Enter startup name"
                             value={formData.startupName}
@@ -65,7 +90,7 @@ export default function LeadForm({ params }) {
 
                     <div>
                         <label className="block mb-1 font-medium text-gray-700">Founder Name</label>
-                        <input
+                        <Input
                             type="text"
                             placeholder="Enter founder name"
                             value={formData.founderName}
@@ -103,7 +128,7 @@ export default function LeadForm({ params }) {
 
                     {/* <div>
                         <label className="block mb-1 font-medium text-gray-700">Stage</label>
-                        <input
+                        <Input
                             type="text"
                             placeholder="Enter startup stage"
                             value={formData.stage}
@@ -116,7 +141,7 @@ export default function LeadForm({ params }) {
                     </div> */}
 
                     <div>
-                        <label className="block mb-1 font-medium text-gray-700">Sector</label>
+                        <label className="block mb-1 font-medium text-gray-700">Stage</label>
                         <select
                             value={formData.stage}
                             required
@@ -126,10 +151,10 @@ export default function LeadForm({ params }) {
                             className="w-full border border-gray-300 px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
                         >
                             <option value="" disabled>
-                                Select your startup sector
+                                Select your startup Stage
                             </option>
                             <option value="Pre-Seed">Pre-Seed</option>
-                            <option value="Pre-Sector A">Pre-Sector A</option>
+                            <option value="Pre-Seed A">Pre-Seed A</option>
                             <option value="Seed">Seed</option>
                             <option value="Series A">Series A</option>
                             <option value="Series B">Series B</option>
@@ -139,8 +164,8 @@ export default function LeadForm({ params }) {
 
                     <div class="flex flex-col gap-4 sm:flex-col lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                            <label className="block mb-1 font-medium text-gray-700">Minimum Amount</label>
-                            <input
+                            <label className="block mb-1 font-medium text-gray-700">Minimum Funding Amount ($/inr)</label>
+                            <Input
                                 type="number"
                                 placeholder="Enter minimum investment amount"
                                 value={formData.minInvestment}
@@ -153,8 +178,8 @@ export default function LeadForm({ params }) {
                         </div>
 
                         <div>
-                            <label className="block mb-1 font-medium text-gray-700">Maximum Amount</label>
-                            <input
+                            <label className="block mb-1 font-medium text-gray-700">Maximum Funding Amount ($/inr)</label>
+                            <Input
                                 type="number"
                                 placeholder="Enter maximum investment amount"
                                 value={formData.maxInvestment}
@@ -169,7 +194,7 @@ export default function LeadForm({ params }) {
 
                     <div>
                         <label className="block mb-1 font-medium text-gray-700">Email</label>
-                        <input
+                        <Input
                             type="email"
                             placeholder="Enter email"
                             value={formData.email}
@@ -183,13 +208,27 @@ export default function LeadForm({ params }) {
 
                     <div>
                         <label className="block mb-1 font-medium text-gray-700">Location</label>
-                        <input
+                        <Input
                             type="text"
                             placeholder="Enter location"
                             value={formData.location}
                             required
                             onChange={(e) =>
                                 setFormData({ ...formData, location: e.target.value })
+                            }
+                            className="w-full border border-gray-300 px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block mb-1 font-medium text-gray-700">Who are competitors?  what do you understand about your business that they don't</label>
+                        <textarea
+                            rows={4}
+                            placeholder="Brief about your startup"
+                            value={formData.competitorsData}
+                            required
+                            onChange={(e) =>
+                                setFormData({ ...formData, competitorsData: e.target.value })
                             }
                             className="w-full border border-gray-300 px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
                         />
@@ -207,6 +246,40 @@ export default function LeadForm({ params }) {
                             }
                             className="w-full border border-gray-300 px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
                         />
+                    </div>
+
+                    <div className="space-y-2 mt-6">
+                        <label className="block mb-1 font-medium text-gray-700">
+                            Pitch Deck (PDF, PPT, PPTX – max 10MB)
+                        </label>
+                        <div
+                            className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:bg-muted/30 transition"
+                            onClick={() =>
+                                document.getElementById("pitchDeck")?.click()
+                            }
+                        >
+                            <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                            <p className="text-sm text-muted-foreground">
+                                {pitchDeck
+                                    ? pitchDeck.name
+                                    : "Click to upload or drag and drop"}
+                            </p>
+                            <Input
+                                id="pitchDeck"
+                                type="file"
+                                accept=".pdf,.ppt,.pptx"
+                                className="hidden"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) setPitchDeck(file);
+                                }}
+                            />
+                            {pitchDeck && (
+                                <p className="text-xs text-green-600 mt-2">
+                                    ✅ {pitchDeck.name} selected
+                                </p>
+                            )}
+                        </div>
                     </div>
 
                     <button

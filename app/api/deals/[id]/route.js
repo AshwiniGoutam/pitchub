@@ -25,6 +25,7 @@ export async function GET(req, { params }) {
     return NextResponse.json({
       status: "success",
       data: {
+        deals: deal,
         dealId: deal.emailId,
         founderName: deal.from,
         founderEmail: deal.fromEmail,

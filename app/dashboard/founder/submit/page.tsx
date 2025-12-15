@@ -182,22 +182,20 @@ export default function SubmitPitchPage() {
                     className={`flex items-center ${i !== 2 && "flex-1"}`}
                   >
                     <div
-                      className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
-                        isActive
+                      className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${isActive
                           ? "bg-primary text-white"
                           : isCompleted
-                          ? "bg-green-500 text-white"
-                          : "bg-muted text-muted-foreground"
-                      }`}
+                            ? "bg-green-500 text-white"
+                            : "bg-muted text-muted-foreground"
+                        }`}
                     >
                       {stepNumber}
                     </div>
                     <span
-                      className={`ml-2 text-sm ${
-                        isActive
+                      className={`ml-2 text-sm ${isActive
                           ? "font-semibold text-foreground"
                           : "text-muted-foreground"
-                      }`}
+                        }`}
                     >
                       {label}
                     </span>
