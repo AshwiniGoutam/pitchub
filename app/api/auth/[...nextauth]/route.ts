@@ -45,7 +45,6 @@ export const authOptions: NextAuthOptions = {
             "email",
             "profile",
             "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.modify",
           ].join(" "),
           access_type: "offline",
           prompt: "consent", // 🔥 REQUIRED to re-grant scopes
