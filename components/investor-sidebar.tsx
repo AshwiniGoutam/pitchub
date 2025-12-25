@@ -59,6 +59,9 @@ export function InvestorSidebar() {
       {/* Logo */}
       <div className="flex h-16 items-center gap-2 border-b px-6">
         <img src="/images/logo.png" alt="logo" width="120px" />
+        <span className="text-[10px] font-semibold bg-green-600 text-white px-2 py-0.5 rounded-md tracking-wide">
+          BETA
+        </span>
       </div>
 
       {/* Navigation */}

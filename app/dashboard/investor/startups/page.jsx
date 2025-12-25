@@ -32,6 +32,8 @@ export default function Page() {
   const [investorThesis, setInvestorThesis] = useState(null);
   const [debugInfo, setDebugInfo] = useState("");
   const [dealsloading, setDealsLoading] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [dealToDelete, setDealToDelete] = useState(null);
 
   useEffect(() => {
     console.log("Component mounted - fetching data...");
@@ -50,7 +52,9 @@ export default function Page() {
       if (res.ok) {
         const thesis = await res.json();
         console.log("✅ Thesis fetched successfully:", thesis);
-        setDebugInfo(`Thesis loaded: ${JSON.stringify(thesis).substring(0, 100)}...`);
+        setDebugInfo(
+          `Thesis loaded: ${JSON.stringify(thesis).substring(0, 100)}...`
+        );
         setInvestorThesis(thesis);
 
         // Fetch startups after thesis is loaded
@@ -66,7 +70,7 @@ export default function Page() {
           checkSizeMax: 0,
           geographies: [],
           keywords: [],
-          excludedKeywords: []
+          excludedKeywords: [],
         };
         setInvestorThesis(defaultThesis);
         await fetchStartups(defaultThesis);
@@ -81,7 +85,7 @@ export default function Page() {
         checkSizeMax: 0,
         geographies: [],
         keywords: [],
-        excludedKeywords: []
+        excludedKeywords: [],
       };
       setInvestorThesis(defaultThesis);
       await fetchStartups(defaultThesis);
@@ -94,7 +98,7 @@ export default function Page() {
       startupSector: startup.sector,
       startupStage: startup.stage,
       startupFunding: startup.fundingRequirement,
-      startupLocation: startup.location
+      startupLocation: startup.location,
     });
 
     if (!thesis || Object.keys(thesis).length === 0) {
@@ -118,16 +122,18 @@ export default function Page() {
       checkSize: { min: thesis.checkSizeMin, max: thesis.checkSizeMax },
       geographies: thesis.geographies,
       keywords: thesis.keywords,
-      excludedKeywords: thesis.excludedKeywords
+      excludedKeywords: thesis.excludedKeywords,
     });
 
     // Sector matching
     if (thesis.sectors && thesis.sectors.length > 0 && startup.sector) {
       const startupSector = startup.sector.toLowerCase().trim();
       const matchedSector = thesis.sectors.some(
-        sector => sector.toLowerCase().trim() === startupSector
+        (sector) => sector.toLowerCase().trim() === startupSector
       );
-      console.log(`🏢 Sector matching: ${startupSector} vs ${thesis.sectors} -> ${matchedSector}`);
+      console.log(
+        `🏢 Sector matching: ${startupSector} vs ${thesis.sectors} -> ${matchedSector}`
+      );
       if (matchedSector) {
         score += weights.sector;
         console.log(`✅ Sector matched! +${weights.sector}`);
@@ -139,9 +145,11 @@ export default function Page() {
     if (thesis.stages && thesis.stages.length > 0 && startup.stage) {
       const startupStage = startup.stage.toLowerCase().trim();
       const matchedStage = thesis.stages.some(
-        stage => stage.toLowerCase().trim() === startupStage
+        (stage) => stage.toLowerCase().trim() === startupStage
       );
-      console.log(`📈 Stage matching: ${startupStage} vs ${thesis.stages} -> ${matchedStage}`);
+      console.log(
+        `📈 Stage matching: ${startupStage} vs ${thesis.stages} -> ${matchedStage}`
+      );
       if (matchedStage) {
         score += weights.stage;
         console.log(`✅ Stage matched! +${weights.stage}`);
@@ -162,7 +170,9 @@ export default function Page() {
 
       // Check if funding ranges overlap
       const fundingOverlap = startupMin <= thesisMax && startupMax >= thesisMin;
-      console.log(`💰 Funding matching: Startup ${startupMin}-${startupMax} vs Thesis ${thesisMin}-${thesisMax} -> ${fundingOverlap}`);
+      console.log(
+        `💰 Funding matching: Startup ${startupMin}-${startupMax} vs Thesis ${thesisMin}-${thesisMax} -> ${fundingOverlap}`
+      );
 
       if (fundingOverlap) {
         score += weights.funding;
@@ -178,10 +188,12 @@ export default function Page() {
       startup.location
     ) {
       const startupLocation = startup.location.toLowerCase();
-      const matchedGeo = thesis.geographies.some(geo =>
+      const matchedGeo = thesis.geographies.some((geo) =>
         startupLocation.includes(geo.toLowerCase())
       );
-      console.log(`🌍 Geography matching: ${startupLocation} vs ${thesis.geographies} -> ${matchedGeo}`);
+      console.log(
+        `🌍 Geography matching: ${startupLocation} vs ${thesis.geographies} -> ${matchedGeo}`
+      );
       if (matchedGeo) {
         score += weights.geography;
         console.log(`✅ Geography matched! +${weights.geography}`);
@@ -190,17 +202,18 @@ export default function Page() {
     }
 
     // Keyword matching
-    if (
-      thesis.keywords &&
-      thesis.keywords.length > 0 &&
-      startup.description
-    ) {
+    if (thesis.keywords && thesis.keywords.length > 0 && startup.description) {
       const description = startup.description.toLowerCase();
-      const matchedKeywords = thesis.keywords.filter(keyword =>
+      const matchedKeywords = thesis.keywords.filter((keyword) =>
         description.includes(keyword.toLowerCase())
       );
-      const keywordScore = (matchedKeywords.length / thesis.keywords.length) * weights.keywords;
-      console.log(`🔤 Keyword matching: ${matchedKeywords.length}/${thesis.keywords.length} matched -> +${keywordScore.toFixed(1)}`);
+      const keywordScore =
+        (matchedKeywords.length / thesis.keywords.length) * weights.keywords;
+      console.log(
+        `🔤 Keyword matching: ${matchedKeywords.length}/${
+          thesis.keywords.length
+        } matched -> +${keywordScore.toFixed(1)}`
+      );
 
       if (matchedKeywords.length > 0) {
         score += keywordScore;
@@ -217,19 +230,26 @@ export default function Page() {
       startup.description
     ) {
       const description = startup.description.toLowerCase();
-      const excludedMatches = thesis.excludedKeywords.filter(keyword =>
+      const excludedMatches = thesis.excludedKeywords.filter((keyword) =>
         description.includes(keyword.toLowerCase())
       );
       if (excludedMatches.length > 0) {
-        console.log(`🚫 Excluded keywords found: ${excludedMatches} -> applying 30% penalty`);
+        console.log(
+          `🚫 Excluded keywords found: ${excludedMatches} -> applying 30% penalty`
+        );
         score *= 0.7; // 30% penalty for excluded keywords
         excludedPenalty = true;
       }
     }
 
     // Calculate final score
-    const finalScore = totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 50;
-    console.log(`🎯 Final calculation: ${score}/${totalWeight} = ${finalScore}%${excludedPenalty ? ' (with penalty)' : ''}`);
+    const finalScore =
+      totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 50;
+    console.log(
+      `🎯 Final calculation: ${score}/${totalWeight} = ${finalScore}%${
+        excludedPenalty ? " (with penalty)" : ""
+      }`
+    );
 
     // Ensure score is between 0-100
     return Math.min(100, Math.max(0, finalScore));
@@ -239,7 +259,7 @@ export default function Page() {
     setDealsLoading(true);
     try {
       console.log("🔄 Fetching startups...");
-      setDebugInfo(prev => prev + "\nFetching startups...");
+      setDebugInfo((prev) => prev + "\nFetching startups...");
 
       const res = await fetch("/api/investor/startups", { cache: "no-store" });
 
@@ -249,7 +269,7 @@ export default function Page() {
 
       const data = await res.json();
       console.log(`✅ Startups fetched: ${data.length} startups`);
-      setDebugInfo(prev => prev + `\nFound ${data.length} startups`);
+      setDebugInfo((prev) => prev + `\nFound ${data.length} startups`);
       setDealsLoading(false);
 
       // Use the provided thesis or fall back to state
@@ -261,16 +281,25 @@ export default function Page() {
         relevanceScore: calculateRelevancyScore(startup, thesisToUse),
       }));
 
-      console.log("📊 Startups with scores:", startupsWithScores.map(s => ({
-        name: s.name,
-        score: s.relevanceScore
-      })));
+      console.log(
+        "📊 Startups with scores:",
+        startupsWithScores.map((s) => ({
+          name: s.name,
+          score: s.relevanceScore,
+        }))
+      );
 
-      setDebugInfo(prev => prev + `\nScores calculated: ${startupsWithScores.map(s => s.relevanceScore).join(', ')}`);
+      setDebugInfo(
+        (prev) =>
+          prev +
+          `\nScores calculated: ${startupsWithScores
+            .map((s) => s.relevanceScore)
+            .join(", ")}`
+      );
       setStartups(startupsWithScores);
     } catch (err) {
       console.error("❌ Error fetching startups:", err);
-      setDebugInfo(prev => prev + `\nError: ${err.message}`);
+      setDebugInfo((prev) => prev + `\nError: ${err.message}`);
       setDealsLoading(false);
     }
   };
@@ -342,6 +371,29 @@ export default function Page() {
     return true;
   });
 
+  const deleteDeal = async () => {
+    if (!dealToDelete) return;
+
+    try {
+      const res = await fetch(`/api/deals?emailId=${dealToDelete}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setDeals((prev) => prev.filter((d) => d.emailId !== dealToDelete));
+        setDeleteModalOpen(false);
+        setDealToDelete(null);
+      } else {
+        alert(data.error || "Failed to delete deal");
+      }
+    } catch (error) {
+      console.error("Delete deal error:", error);
+      alert("Error deleting deal");
+    }
+  };
+
   const InfoRow = ({ label, value }) => (
     <div className="flex items-center">
       <span className="font-semibold text-gray-600 w-40">{label}:</span>
@@ -411,7 +463,9 @@ export default function Page() {
                           key={deal.emailId}
                           className="transition hover:bg-emerald-50/40"
                           onDoubleClick={() =>
-                            router.push(`/dashboard/investor/startups/${deal.emailId}`)
+                            router.push(
+                              `/dashboard/investor/startups/${deal.emailId}`
+                            )
                           }
                         >
                           <td className="text-sm px-6 py-4">{deal.from}</td>
@@ -446,6 +500,17 @@ export default function Page() {
                               }}
                             >
                               View Details
+                            </Button>
+
+                            <Button
+                              variant="destructive"
+                              className="text-xs bg-red-500 hover:bg-red-600 text-white font-medium ml-2"
+                              onClick={() => {
+                                setDealToDelete(deal.emailId);
+                                setDeleteModalOpen(true);
+                              }}
+                            >
+                              Delete
                             </Button>
                           </td>
                         </tr>
@@ -633,6 +698,34 @@ export default function Page() {
                 {Loading ? "Sending Email..." : "Send Email"}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <DialogContent className="max-w-sm bg-white rounded shadow-xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Delete Deal?
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">
+              This action will permanently remove this deal from your dashboard.
+              Are you sure you want to continue?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" onClick={() => setDeleteModalOpen(false)}>
+              Cancel
+            </Button>
+
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={deleteDeal}
+            >
+              Yes, Delete
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
