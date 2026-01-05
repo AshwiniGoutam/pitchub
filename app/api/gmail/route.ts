@@ -668,12 +668,13 @@ async function getThreadReplies(collection, messageId) {
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session) {
+
+  if (!session?.user?.email) {
     return new Response("Unauthorized", { status: 401 });
   }
 
   const db = await getDatabase();
-  const emails = db.collection("gmail_emails");
+  const emails = db.collection("emails"); // ✅ FIXED
 
   const { searchParams } = new URL(req.url);
   const page = Number(searchParams.get("page") || 1);
@@ -681,18 +682,15 @@ export async function GET(req: Request) {
   const skip = (page - 1) * limit;
 
   const list = await emails
-     .find({ ownerEmail: session.user.email }) 
+    .find({ ownerEmail: session.user.email }) // ✅ MATCHES INBOUND
     .sort({ receivedAt: -1 })
     .skip(skip)
     .limit(limit)
     .toArray();
 
-  const total = await emails.countDocuments();
-
-  return Response.json({
-    emails: list,
-    total,
-    page,
-    limit,
+  const total = await emails.countDocuments({
+    ownerEmail: session.user.email,
   });
+
+  return Response.json({ emails: list, total, page, limit });
 }

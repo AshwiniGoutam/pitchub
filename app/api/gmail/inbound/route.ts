@@ -1,34 +1,29 @@
 import { getDatabase } from "@/lib/mongodb";
 
-function extractEmail(str = "") {
-  const match = str.match(/<(.+?)>/);
-  return match ? match[1] : str;
+function extractEmail(raw = "") {
+  const match = raw.match(/<(.+?)>/);
+  return match ? match[1].toLowerCase() : raw.toLowerCase();
 }
 
 export async function POST(req: Request) {
   const formData = await req.formData();
 
-  const toRaw = formData.get("to")?.toString() || "";
-  const toEmail = extractEmail(toRaw).toLowerCase();
-
-  // 🔑 OWNER email (the user who forwarded)
-  const ownerEmail = toEmail.replace(
-    /@inbound\.pitchub\.in$/,
-    "@gmail.com" // adapt if needed
-  );
+  const to = extractEmail(formData.get("to")?.toString() || "");
+  const ownerEmail = to.replace("@inbound.pitchub.in", "");
 
   const db = await getDatabase();
   const emails = db.collection("emails");
 
   await emails.insertOne({
-    ownerEmail, // ✅ THIS FIXES EVERYTHING
+    ownerEmail, // 🔑 REQUIRED
     from: formData.get("from"),
+    to,
     subject: formData.get("subject"),
-    text: formData.get("body-plain"),
-    html: formData.get("body-html"),
+    content: formData.get("body-plain") || formData.get("body-html"),
     messageId: formData.get("Message-Id"),
     inReplyTo: formData.get("In-Reply-To"),
     receivedAt: new Date(),
+    createdAt: new Date(),
   });
 
   return Response.json({ success: true });
