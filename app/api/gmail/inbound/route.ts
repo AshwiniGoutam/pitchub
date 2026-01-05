@@ -1,11 +1,26 @@
 import { getDatabase } from "@/lib/mongodb";
 
+/**
+ * GET → Just to verify endpoint is alive (browser / health check)
+ */
+export async function GET() {
+  return new Response(
+    JSON.stringify({
+      status: "ok",
+      message: "Email inbound endpoint is live",
+    }),
+    { status: 200 }
+  );
+}
+
+/**
+ * POST → Mailgun will call this
+ */
 export async function POST(req: Request) {
   console.log("📩 Mailgun webhook hit");
 
   const formData = await req.formData();
-
-  console.log("📨 Keys:", Array.from(formData.keys()));
+  console.log("📨 Fields:", Array.from(formData.keys()));
 
   const db = await getDatabase();
   const emails = db.collection("emails");
@@ -16,8 +31,10 @@ export async function POST(req: Request) {
     subject: formData.get("subject"),
     text: formData.get("body-plain"),
     html: formData.get("body-html"),
+    messageId: formData.get("Message-Id"),
+    inReplyTo: formData.get("In-Reply-To"),
     receivedAt: new Date(),
   });
 
-  return Response.json({ ok: true });
+  return Response.json({ success: true });
 }
