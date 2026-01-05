@@ -1,40 +1,35 @@
 import { getDatabase } from "@/lib/mongodb";
 
-/**
- * GET → Just to verify endpoint is alive (browser / health check)
- */
-export async function GET() {
-  return new Response(
-    JSON.stringify({
-      status: "ok",
-      message: "Email inbound endpoint is live",
-    }),
-    { status: 200 }
-  );
-}
-
-/**
- * POST → Mailgun will call this
- */
 export async function POST(req: Request) {
-  console.log("📩 Mailgun webhook hit");
-
   const formData = await req.formData();
-  console.log("📨 Fields:", Array.from(formData.keys()));
 
   const db = await getDatabase();
   const emails = db.collection("emails");
 
-  await emails.insertOne({
+  const email = {
+    messageId: formData.get("message-id"),
+    inReplyTo: formData.get("in-reply-to"),
     from: formData.get("from"),
     to: formData.get("to"),
     subject: formData.get("subject"),
-    text: formData.get("body-plain"),
-    html: formData.get("body-html"),
-    messageId: formData.get("Message-Id"),
-    inReplyTo: formData.get("In-Reply-To"),
+    text: formData.get("text"),
+    html: formData.get("html"),
     receivedAt: new Date(),
-  });
+    attachments: [],
+  };
+
+  // Attachments
+  for (const [key, value] of formData.entries()) {
+    if (key.startsWith("attachment")) {
+      email.attachments.push({
+        filename: value.name,
+        type: value.type,
+        size: value.size,
+      });
+    }
+  }
+
+  await emails.insertOne(email);
 
   return Response.json({ success: true });
 }

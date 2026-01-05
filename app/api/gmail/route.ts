@@ -352,308 +352,347 @@ function extractLinksFromText(text = "") {
 
 // ------------------ Thread Replies ------------------
 
-async function getThreadReplies(threadId, accessToken) {
-  if (!threadId) return [];
+// async function getThreadReplies(threadId, accessToken) {
+//   if (!threadId) return [];
 
-  const url = `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`;
-  const { ok, data } = await fetchGmailJson(url, accessToken, "THREAD_DETAIL");
+//   const url = `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`;
+//   const { ok, data } = await fetchGmailJson(url, accessToken, "THREAD_DETAIL");
 
-  if (!ok || !data) return [];
+//   if (!ok || !data) return [];
 
-  try {
-    const messages = data.messages || [];
-    if (!messages.length) return [];
+//   try {
+//     const messages = data.messages || [];
+//     if (!messages.length) return [];
 
-    const originalId = messages[0].id;
-    const replies = [];
+//     const originalId = messages[0].id;
+//     const replies = [];
 
-    for (const msg of messages) {
-      if (msg.id === originalId) continue;
+//     for (const msg of messages) {
+//       if (msg.id === originalId) continue;
 
-      const headers = msg.payload?.headers || [];
-      const subject =
-        headers.find((h) => h.name === "Subject")?.value || "(no subject)";
-      const fromHeader =
-        headers.find((h) => h.name === "From")?.value || "(unknown sender)";
-      const date = headers.find((h) => h.name === "Date")?.value || "";
+//       const headers = msg.payload?.headers || [];
+//       const subject =
+//         headers.find((h) => h.name === "Subject")?.value || "(no subject)";
+//       const fromHeader =
+//         headers.find((h) => h.name === "From")?.value || "(unknown sender)";
+//       const date = headers.find((h) => h.name === "Date")?.value || "";
 
-      const content = extractBodySafe(msg.payload);
+//       const content = extractBodySafe(msg.payload);
 
-      replies.push({
-        id: msg.id,
-        subject: cleanTextForMongoDB(subject),
-        from: cleanTextForMongoDB(fromHeader),
-        date,
-        content: cleanTextForMongoDB(content),
-      });
-    }
+//       replies.push({
+//         id: msg.id,
+//         subject: cleanTextForMongoDB(subject),
+//         from: cleanTextForMongoDB(fromHeader),
+//         date,
+//         content: cleanTextForMongoDB(content),
+//       });
+//     }
 
-    // newest reply first (so replies[0] is the latest)
-    replies.sort((a, b) => new Date(b.date) - new Date(a.date));
-    return replies;
-  } catch (error) {
-    console.warn("Error parsing thread replies:", error?.message);
-    return [];
-  }
+//     // newest reply first (so replies[0] is the latest)
+//     replies.sort((a, b) => new Date(b.date) - new Date(a.date));
+//     return replies;
+//   } catch (error) {
+//     console.warn("Error parsing thread replies:", error?.message);
+//     return [];
+//   }
+// }
+
+async function getThreadReplies(collection, messageId) {
+  return collection
+    .find({ inReplyTo: messageId })
+    .sort({ receivedAt: -1 })
+    .toArray();
 }
+
 
 // ------------------ Main Handler ------------------
 
-export async function GET(request) {
+// export async function GET(request) {
+//   const session = await getServerSession(authOptions);
+//   if (!session?.accessToken) {
+//     return new Response(JSON.stringify({ error: "Not authenticated" }), {
+//       status: 401,
+//     });
+//   }
+
+//   const tokenInfoRes = await fetch(
+//     `https://oauth2.googleapis.com/tokeninfo?access_token=${session.accessToken}`
+//   );
+//   const tokenInfo = await tokenInfoRes.json();
+
+//   console.log("🔍 TOKEN INFO", tokenInfo);
+
+//   try {
+//     const db = await getDatabase();
+//     const emailsCollection = db.collection("gmail_emails");
+//     const acceptedCollection = db.collection("accepted_pitches");
+//     const rejectedCollection = db.collection("rejected_pitches");
+
+//     const { searchParams } = new URL(request.url);
+//     const page = parseInt(searchParams.get("page") || "1", 10);
+//     const limit = parseInt(searchParams.get("limit") || "10", 10);
+//     const offset = (page - 1) * limit;
+
+//     const thesis = await getInvestorThesisByEmail(session.user.email);
+
+//     const query =
+//       "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
+
+//     const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
+//       query
+//     )}`;
+//     const { ok: listOk, data: listData } = await fetchGmailJson(
+//       listUrl,
+//       session.accessToken,
+//       "MESSAGE_LIST"
+//     );
+
+//     if (!listOk || !listData) {
+//       return new Response(
+//         JSON.stringify({
+//           error: "Failed to fetch Gmail list",
+//         }),
+//         { status: 502 }
+//       );
+//     }
+
+//     const allMessages = listData.messages || [];
+//     const paginatedMessages = allMessages.slice(offset, offset + limit);
+//     const gmailIds = paginatedMessages.map((m) => m.id);
+
+//     // Accepted / Rejected lookup
+//     const [accepted, rejected] = await Promise.all([
+//       acceptedCollection
+//         .find({ userEmail: session.user.email, emailId: { $in: gmailIds } })
+//         .toArray(),
+//       rejectedCollection
+//         .find({ userEmail: session.user.email, emailId: { $in: gmailIds } })
+//         .toArray(),
+//     ]);
+
+//     const acceptedIds = new Set(accepted.map((a) => a.emailId));
+//     const rejectedIds = new Set(rejected.map((r) => r.emailId));
+
+//     const emailPromises = paginatedMessages.map(async (msg) => {
+//       // 1. Try DB cache
+//       let existing = await getExistingEmailSafe(emailsCollection, msg.id);
+
+//       // If existing but without threadId (old data), force refetch to enable replies
+//       if (existing && !existing.threadId) {
+//         existing = null;
+//       }
+
+//       if (existing) {
+//         // refresh accepted/rejected flags & status
+//         existing.accepted = acceptedIds.has(existing.gmailId);
+//         existing.rejected = rejectedIds.has(existing.gmailId);
+//         existing.status = determineStatus({
+//           accepted: existing.accepted,
+//           rejected: existing.rejected,
+//           isRead: existing.isRead,
+//         });
+
+//         // refresh links and replies (get latest replies)
+//         existing.links = extractLinksFromText(existing.content || "");
+//         existing.replies = await getThreadReplies(
+//           existing.threadId,
+//           session.accessToken
+//         );
+
+//         // update timestamp to latest reply date if present
+//         try {
+//           let finalTimestamp = existing.timestamp
+//             ? new Date(existing.timestamp)
+//             : new Date();
+
+//           if (existing.replies && existing.replies.length > 0) {
+//             const latestReplyDate = new Date(existing.replies[0].date);
+//             if (!isNaN(latestReplyDate.getTime())) {
+//               finalTimestamp = latestReplyDate;
+//             }
+//           }
+
+//           existing.timestamp = finalTimestamp.toISOString();
+//         } catch (err) {
+//           // keep existing.timestamp as-is if parse fails
+//         }
+
+//         return existing;
+//       }
+
+//       // 2. Fetch fresh from Gmail
+//       const messageUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`;
+//       const { ok: msgOk, data: detail } = await fetchGmailJson(
+//         messageUrl,
+//         session.accessToken,
+//         "MESSAGE_DETAIL"
+//       );
+
+//       if (!msgOk || !detail) return null;
+
+//       const headers = detail.payload?.headers || [];
+//       const subject =
+//         headers.find((h) => h.name === "Subject")?.value || "(no subject)";
+//       const fromHeader =
+//         headers.find((h) => h.name === "From")?.value || "(unknown sender)";
+//       const date = headers.find((h) => h.name === "Date")?.value || "";
+
+//       const rawBody = extractBodySafe(detail.payload);
+//       const attachments = extractAttachmentsSafe(detail.payload, msg.id);
+
+//       let from = cleanTextForMongoDB(fromHeader);
+//       let fromEmail = cleanTextForMongoDB(fromHeader);
+//       const match = fromHeader.match(/^(.*)<(.+)>$/);
+//       if (match) {
+//         from = cleanTextForMongoDB(match[1].trim());
+//         fromEmail = cleanTextForMongoDB(match[2].trim());
+//       }
+
+//       const cleanedSubject = cleanTextForMongoDB(subject);
+//       const cleanedBody = cleanTextForMongoDB(rawBody);
+//       const sector = detectSector(fromEmail, cleanedSubject, cleanedBody);
+//       const isRead = !detail.labelIds?.includes("UNREAD");
+//       const isStarred = detail.labelIds?.includes("STARRED") || false;
+
+//       const status = determineStatus({
+//         accepted: acceptedIds.has(msg.id),
+//         rejected: rejectedIds.has(msg.id),
+//         isRead,
+//       });
+
+//       const relevanceScore = computeRelevance(
+//         { subject: cleanedSubject, content: cleanedBody, sector },
+//         thesis
+//       );
+
+//       const threadId = detail.threadId || null;
+//       const links = extractLinksFromText(cleanedBody);
+//       const replies = await getThreadReplies(threadId, session.accessToken);
+
+//       // compute final timestamp: prefer latest reply date if exists
+//       let finalTimestamp = date ? new Date(date) : new Date();
+//       if (replies && replies.length > 0) {
+//         const latestReplyDate = new Date(replies[0].date);
+//         if (!isNaN(latestReplyDate.getTime())) {
+//           finalTimestamp = latestReplyDate;
+//         }
+//       }
+
+//       const newEmail = cleanEmailData({
+//         gmailId: msg.id,
+//         from,
+//         fromEmail,
+//         subject: cleanedSubject,
+//         sector,
+//         status,
+//         relevanceScore,
+//         timestamp: finalTimestamp.toISOString(),
+//         content: cleanedBody,
+//         attachments,
+//         isRead,
+//         isStarred,
+//         createdAt: new Date(),
+//         links,
+//         threadId,
+//         replies,
+//       });
+
+//       return newEmail;
+//     });
+
+//     const emailResults = await Promise.allSettled(emailPromises);
+
+//     // Bulk upsert into DB
+//     const bulkOps = emailResults
+//       .filter((r) => r.status === "fulfilled" && r.value)
+//       .map((r) => ({
+//         updateOne: {
+//           filter: { gmailId: r.value.gmailId },
+//           update: { $set: r.value },
+//           upsert: true,
+//         },
+//       }));
+
+//     if (bulkOps.length > 0) {
+//       try {
+//         await emailsCollection.bulkWrite(bulkOps, { ordered: false });
+//       } catch (error) {
+//         console.warn("Bulk write error:", error?.message);
+//       }
+//     }
+
+//     // Build final sanitized list from results (use returned values, not DB, to reflect latest computed timestamp)
+//     const cleanedEmails = emailResults
+//       .filter((r) => r.status === "fulfilled" && r.value)
+//       .map((r) => r.value)
+//       .filter(Boolean);
+
+//     // Sort by timestamp (newest first) so replied threads with updated timestamp come first
+//     cleanedEmails.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+//     // Map to response shape: remove internal fields
+//     const sanitized = cleanedEmails.map((e) => {
+//       const clone = { ...e };
+//       return {
+//         ...clone,
+//         id: clone.gmailId,
+//         // hide internal DB id fields if present
+//         _id: undefined,
+//         gmailId: undefined,
+//       };
+//     });
+
+//     return new Response(
+//       JSON.stringify({
+//         emails: sanitized,
+//         total: allMessages.length,
+//         page,
+//         limit,
+//       }),
+//       {
+//         status: 200,
+//         headers: { "Content-Type": "application/json; charset=utf-8" },
+//       }
+//     );
+//   } catch (err) {
+//     console.error("🔥 Gmail API error:", err);
+//     return new Response(
+//       JSON.stringify({
+//         error: "Internal server error",
+//         details: "Failed to process email data",
+//       }),
+//       { status: 500 }
+//     );
+//   }
+// }
+
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session?.accessToken) {
-    return new Response(JSON.stringify({ error: "Not authenticated" }), {
-      status: 401,
-    });
+  if (!session) {
+    return new Response("Unauthorized", { status: 401 });
   }
 
-  const tokenInfoRes = await fetch(
-    `https://oauth2.googleapis.com/tokeninfo?access_token=${session.accessToken}`
-  );
-  const tokenInfo = await tokenInfoRes.json();
+  const db = await getDatabase();
+  const emails = db.collection("gmail_emails");
 
-  console.log("🔍 TOKEN INFO", tokenInfo);
+  const { searchParams } = new URL(req.url);
+  const page = Number(searchParams.get("page") || 1);
+  const limit = Number(searchParams.get("limit") || 10);
+  const skip = (page - 1) * limit;
 
-  try {
-    const db = await getDatabase();
-    const emailsCollection = db.collection("gmail_emails");
-    const acceptedCollection = db.collection("accepted_pitches");
-    const rejectedCollection = db.collection("rejected_pitches");
+  const list = await emails
+    .find({})
+    .sort({ receivedAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .toArray();
 
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
-    const offset = (page - 1) * limit;
+  const total = await emails.countDocuments();
 
-    const thesis = await getInvestorThesisByEmail(session.user.email);
-
-    const query =
-      "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
-
-    const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
-      query
-    )}`;
-    const { ok: listOk, data: listData } = await fetchGmailJson(
-      listUrl,
-      session.accessToken,
-      "MESSAGE_LIST"
-    );
-
-    if (!listOk || !listData) {
-      return new Response(
-        JSON.stringify({
-          error: "Failed to fetch Gmail list",
-        }),
-        { status: 502 }
-      );
-    }
-
-    const allMessages = listData.messages || [];
-    const paginatedMessages = allMessages.slice(offset, offset + limit);
-    const gmailIds = paginatedMessages.map((m) => m.id);
-
-    // Accepted / Rejected lookup
-    const [accepted, rejected] = await Promise.all([
-      acceptedCollection
-        .find({ userEmail: session.user.email, emailId: { $in: gmailIds } })
-        .toArray(),
-      rejectedCollection
-        .find({ userEmail: session.user.email, emailId: { $in: gmailIds } })
-        .toArray(),
-    ]);
-
-    const acceptedIds = new Set(accepted.map((a) => a.emailId));
-    const rejectedIds = new Set(rejected.map((r) => r.emailId));
-
-    const emailPromises = paginatedMessages.map(async (msg) => {
-      // 1. Try DB cache
-      let existing = await getExistingEmailSafe(emailsCollection, msg.id);
-
-      // If existing but without threadId (old data), force refetch to enable replies
-      if (existing && !existing.threadId) {
-        existing = null;
-      }
-
-      if (existing) {
-        // refresh accepted/rejected flags & status
-        existing.accepted = acceptedIds.has(existing.gmailId);
-        existing.rejected = rejectedIds.has(existing.gmailId);
-        existing.status = determineStatus({
-          accepted: existing.accepted,
-          rejected: existing.rejected,
-          isRead: existing.isRead,
-        });
-
-        // refresh links and replies (get latest replies)
-        existing.links = extractLinksFromText(existing.content || "");
-        existing.replies = await getThreadReplies(
-          existing.threadId,
-          session.accessToken
-        );
-
-        // update timestamp to latest reply date if present
-        try {
-          let finalTimestamp = existing.timestamp
-            ? new Date(existing.timestamp)
-            : new Date();
-
-          if (existing.replies && existing.replies.length > 0) {
-            const latestReplyDate = new Date(existing.replies[0].date);
-            if (!isNaN(latestReplyDate.getTime())) {
-              finalTimestamp = latestReplyDate;
-            }
-          }
-
-          existing.timestamp = finalTimestamp.toISOString();
-        } catch (err) {
-          // keep existing.timestamp as-is if parse fails
-        }
-
-        return existing;
-      }
-
-      // 2. Fetch fresh from Gmail
-      const messageUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`;
-      const { ok: msgOk, data: detail } = await fetchGmailJson(
-        messageUrl,
-        session.accessToken,
-        "MESSAGE_DETAIL"
-      );
-
-      if (!msgOk || !detail) return null;
-
-      const headers = detail.payload?.headers || [];
-      const subject =
-        headers.find((h) => h.name === "Subject")?.value || "(no subject)";
-      const fromHeader =
-        headers.find((h) => h.name === "From")?.value || "(unknown sender)";
-      const date = headers.find((h) => h.name === "Date")?.value || "";
-
-      const rawBody = extractBodySafe(detail.payload);
-      const attachments = extractAttachmentsSafe(detail.payload, msg.id);
-
-      let from = cleanTextForMongoDB(fromHeader);
-      let fromEmail = cleanTextForMongoDB(fromHeader);
-      const match = fromHeader.match(/^(.*)<(.+)>$/);
-      if (match) {
-        from = cleanTextForMongoDB(match[1].trim());
-        fromEmail = cleanTextForMongoDB(match[2].trim());
-      }
-
-      const cleanedSubject = cleanTextForMongoDB(subject);
-      const cleanedBody = cleanTextForMongoDB(rawBody);
-      const sector = detectSector(fromEmail, cleanedSubject, cleanedBody);
-      const isRead = !detail.labelIds?.includes("UNREAD");
-      const isStarred = detail.labelIds?.includes("STARRED") || false;
-
-      const status = determineStatus({
-        accepted: acceptedIds.has(msg.id),
-        rejected: rejectedIds.has(msg.id),
-        isRead,
-      });
-
-      const relevanceScore = computeRelevance(
-        { subject: cleanedSubject, content: cleanedBody, sector },
-        thesis
-      );
-
-      const threadId = detail.threadId || null;
-      const links = extractLinksFromText(cleanedBody);
-      const replies = await getThreadReplies(threadId, session.accessToken);
-
-      // compute final timestamp: prefer latest reply date if exists
-      let finalTimestamp = date ? new Date(date) : new Date();
-      if (replies && replies.length > 0) {
-        const latestReplyDate = new Date(replies[0].date);
-        if (!isNaN(latestReplyDate.getTime())) {
-          finalTimestamp = latestReplyDate;
-        }
-      }
-
-      const newEmail = cleanEmailData({
-        gmailId: msg.id,
-        from,
-        fromEmail,
-        subject: cleanedSubject,
-        sector,
-        status,
-        relevanceScore,
-        timestamp: finalTimestamp.toISOString(),
-        content: cleanedBody,
-        attachments,
-        isRead,
-        isStarred,
-        createdAt: new Date(),
-        links,
-        threadId,
-        replies,
-      });
-
-      return newEmail;
-    });
-
-    const emailResults = await Promise.allSettled(emailPromises);
-
-    // Bulk upsert into DB
-    const bulkOps = emailResults
-      .filter((r) => r.status === "fulfilled" && r.value)
-      .map((r) => ({
-        updateOne: {
-          filter: { gmailId: r.value.gmailId },
-          update: { $set: r.value },
-          upsert: true,
-        },
-      }));
-
-    if (bulkOps.length > 0) {
-      try {
-        await emailsCollection.bulkWrite(bulkOps, { ordered: false });
-      } catch (error) {
-        console.warn("Bulk write error:", error?.message);
-      }
-    }
-
-    // Build final sanitized list from results (use returned values, not DB, to reflect latest computed timestamp)
-    const cleanedEmails = emailResults
-      .filter((r) => r.status === "fulfilled" && r.value)
-      .map((r) => r.value)
-      .filter(Boolean);
-
-    // Sort by timestamp (newest first) so replied threads with updated timestamp come first
-    cleanedEmails.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    // Map to response shape: remove internal fields
-    const sanitized = cleanedEmails.map((e) => {
-      const clone = { ...e };
-      return {
-        ...clone,
-        id: clone.gmailId,
-        // hide internal DB id fields if present
-        _id: undefined,
-        gmailId: undefined,
-      };
-    });
-
-    return new Response(
-      JSON.stringify({
-        emails: sanitized,
-        total: allMessages.length,
-        page,
-        limit,
-      }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      }
-    );
-  } catch (err) {
-    console.error("🔥 Gmail API error:", err);
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        details: "Failed to process email data",
-      }),
-      { status: 500 }
-    );
-  }
+  return Response.json({
+    emails: list,
+    total,
+    page,
+    limit,
+  });
 }
