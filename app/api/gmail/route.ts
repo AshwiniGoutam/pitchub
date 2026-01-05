@@ -681,7 +681,7 @@ export async function GET(req: Request) {
   const skip = (page - 1) * limit;
 
   const list = await emails
-    .find({})
+     .find({ ownerEmail: session.user.email }) 
     .sort({ receivedAt: -1 })
     .skip(skip)
     .limit(limit)
