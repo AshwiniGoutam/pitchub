@@ -352,58 +352,50 @@ function extractLinksFromText(text = "") {
 
 // ------------------ Thread Replies ------------------
 
-// async function getThreadReplies(threadId, accessToken) {
-//   if (!threadId) return [];
+async function getThreadReplies(threadId, accessToken) {
+  if (!threadId) return [];
 
-//   const url = `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`;
-//   const { ok, data } = await fetchGmailJson(url, accessToken, "THREAD_DETAIL");
+  const url = `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`;
+  const { ok, data } = await fetchGmailJson(url, accessToken, "THREAD_DETAIL");
 
-//   if (!ok || !data) return [];
+  if (!ok || !data) return [];
 
-//   try {
-//     const messages = data.messages || [];
-//     if (!messages.length) return [];
+  try {
+    const messages = data.messages || [];
+    if (!messages.length) return [];
 
-//     const originalId = messages[0].id;
-//     const replies = [];
+    const originalId = messages[0].id;
+    const replies = [];
 
-//     for (const msg of messages) {
-//       if (msg.id === originalId) continue;
+    for (const msg of messages) {
+      if (msg.id === originalId) continue;
 
-//       const headers = msg.payload?.headers || [];
-//       const subject =
-//         headers.find((h) => h.name === "Subject")?.value || "(no subject)";
-//       const fromHeader =
-//         headers.find((h) => h.name === "From")?.value || "(unknown sender)";
-//       const date = headers.find((h) => h.name === "Date")?.value || "";
+      const headers = msg.payload?.headers || [];
+      const subject =
+        headers.find((h) => h.name === "Subject")?.value || "(no subject)";
+      const fromHeader =
+        headers.find((h) => h.name === "From")?.value || "(unknown sender)";
+      const date = headers.find((h) => h.name === "Date")?.value || "";
 
-//       const content = extractBodySafe(msg.payload);
+      const content = extractBodySafe(msg.payload);
 
-//       replies.push({
-//         id: msg.id,
-//         subject: cleanTextForMongoDB(subject),
-//         from: cleanTextForMongoDB(fromHeader),
-//         date,
-//         content: cleanTextForMongoDB(content),
-//       });
-//     }
+      replies.push({
+        id: msg.id,
+        subject: cleanTextForMongoDB(subject),
+        from: cleanTextForMongoDB(fromHeader),
+        date,
+        content: cleanTextForMongoDB(content),
+      });
+    }
 
-//     // newest reply first (so replies[0] is the latest)
-//     replies.sort((a, b) => new Date(b.date) - new Date(a.date));
-//     return replies;
-//   } catch (error) {
-//     console.warn("Error parsing thread replies:", error?.message);
-//     return [];
-//   }
-// }
-
-async function getThreadReplies(collection, messageId) {
-  return collection
-    .find({ inReplyTo: messageId })
-    .sort({ receivedAt: -1 })
-    .toArray();
+    // newest reply first (so replies[0] is the latest)
+    replies.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return replies;
+  } catch (error) {
+    console.warn("Error parsing thread replies:", error?.message);
+    return [];
+  }
 }
-
 
 // ------------------ Main Handler ------------------
 
