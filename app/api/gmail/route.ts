@@ -428,7 +428,7 @@ export async function GET(request) {
     const thesis = await getInvestorThesisByEmail(session.user.email);
 
     const query =
-      "newer_than:90d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
+      "newer_than:180d (startup OR pitch OR investor OR fund OR vc OR fintech OR founder OR deck)";
 
     const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
       query
